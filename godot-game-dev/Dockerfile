@@ -20,8 +20,8 @@ RUN apt-get update && apt-get install -y \
     # Godot runtime dependencies
     libx11-6 libxcursor1 libxinerama1 libxrandr2 libgl1 \
     libegl1 libgles2 libglx0 \
-    # Additional Godot libraries (t64 variants for Ubuntu 24.04)
-    libfontconfig1 libasound2t64 libpulse0 \
+    # Additional Godot libraries
+    libfontconfig1 libasound2 libpulse0 \
     libxrender1 libxi6 libxkbcommon0 libxfixes3 \
     libxxf86vm1 libsm6 \
     # Multimedia tools
