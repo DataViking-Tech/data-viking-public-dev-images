@@ -1,0 +1,15 @@
+{
+  "name": "dbt-postgres",
+  "build": {
+    "dockerfile": "../../Dockerfile",
+    "context": "../.."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "innoverio.vscode-dbt-power-user"
+      ]
+    }
+  },
+  "postCreateCommand": "cp /usr/local/share/image-docs/UTILITIES.md .devcontainer/UTILITIES.md 2>/dev/null || true"
+}

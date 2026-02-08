@@ -1,0 +1,42 @@
+name: "Godot: PR Build Validation"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'godot-game-dev/**'
+      - '.github/workflows/godot-build-pr.yml'
+
+concurrency:
+  group: godot-pr-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: godot-game-dev-pr
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build dev container image (no push)
+        uses: devcontainers/ci@v0.3
+        with:
+          configFile: godot-game-dev/.devcontainer/ci/devcontainer.json
+          imageName: ${{ env.IMAGE_NAME }}
+          imageTag: ${{ github.event.pull_request.number }}
+          push: never
+
+      - name: Run validate-tools.sh
+        run: |
+          docker run --rm ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }} \
+            /usr/local/bin/validate-tools.sh
+
+      - name: Validate devcontainer metadata
+        run: ./godot-game-dev/tests/validate-metadata.sh ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}

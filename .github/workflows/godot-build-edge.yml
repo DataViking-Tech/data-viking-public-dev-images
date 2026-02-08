@@ -1,0 +1,68 @@
+name: "Godot: Build and Publish Edge"
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Nightly at midnight UTC
+  push:
+    branches:
+      - main
+    paths:
+      - 'godot-game-dev/**'
+      - '.github/workflows/godot-build-edge.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: dataviking-tech/godot-game-dev
+
+# Prevent multiple edge builds from running simultaneously
+concurrency:
+  group: godot-edge-build
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push dev container image
+        uses: devcontainers/ci@v0.3
+        with:
+          configFile: godot-game-dev/.devcontainer/ci/devcontainer.json
+          imageName: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          imageTag: edge
+          push: always
+          cacheFrom: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
+
+      - name: Test edge image
+        run: |
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge \
+            /usr/local/bin/validate-tools.sh
+
+      - name: Validate devcontainer metadata
+        run: ./godot-game-dev/tests/validate-metadata.sh ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
+
+      - name: Image summary
+        run: |
+          echo "### 🌙 Godot Edge Image Published!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** edge" >> $GITHUB_STEP_SUMMARY
+          echo "**Built from:** \`${{ github.ref }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Use this tag for testing latest changes before they're released." >> $GITHUB_STEP_SUMMARY

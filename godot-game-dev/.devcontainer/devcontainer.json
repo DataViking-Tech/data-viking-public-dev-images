@@ -1,0 +1,27 @@
+{
+	"name": "Godot Game Dev Image Development",
+	"image": "ghcr.io/dataviking-tech/godot-game-dev:edge", //Primary image
+	//"image": "ghcr.io/dataviking-tech/ai-dev-base:edge",  // Fallback
+	//"build": {"dockerfile": "../Dockerfile"},
+
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+			"version": "latest",
+			"dockerDashComposeVersion": "v2"
+		}
+	},
+
+	"postCreateCommand": "echo 'Using godot-game-dev:edge to develop next version'",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"geequlim.godot-tools"
+			],
+			"settings": {
+				"godotTools.editorPath.godot4": "/opt/godot",
+				"godotTools.lsp.serverPort": 6005,
+				"godotTools.lsp.serverHost": "127.0.0.1"
+			}
+		}
+	}
+}

@@ -1,0 +1,59 @@
+#!/bin/bash
+# Auto-start Godot LSP server for IDE integration
+#
+# Detects project path from:
+#   1. GODOT_PROJECT_PATH env var (explicit override)
+#   2. project.godot in workspace root
+#   3. project.godot via recursive search (max depth 3)
+#
+# Environment variables:
+#   GODOT_PROJECT_PATH  - Explicit path to directory containing project.godot
+#   GODOT_LSP_PORT      - LSP server port (default: 6005)
+#   GODOT_LSP_DISABLED  - Set to "1" to skip auto-start
+
+set -euo pipefail
+
+GODOT_LSP_PORT="${GODOT_LSP_PORT:-6005}"
+GODOT_BIN="/opt/godot"
+LOG_FILE="/tmp/godot-lsp.log"
+
+# Allow opt-out
+if [ "${GODOT_LSP_DISABLED:-0}" = "1" ]; then
+    echo "Godot LSP auto-start disabled (GODOT_LSP_DISABLED=1)"
+    exit 0
+fi
+
+# Check if LSP is already running
+if pgrep -f "godot.*--lsp-port" > /dev/null 2>&1; then
+    echo "Godot LSP already running ($(pgrep -f 'godot.*--lsp-port'))"
+    exit 0
+fi
+
+# Check Godot binary exists
+if [ ! -x "$GODOT_BIN" ]; then
+    echo "Godot binary not found at $GODOT_BIN"
+    exit 1
+fi
+
+# Determine project path
+WORKSPACE="${PWD:-/workspace}"
+
+if [ -n "${GODOT_PROJECT_PATH:-}" ]; then
+    PROJECT_PATH="$GODOT_PROJECT_PATH"
+elif [ -f "$WORKSPACE/project.godot" ]; then
+    PROJECT_PATH="$WORKSPACE"
+else
+    # Search for project.godot (max depth 3 to avoid deep traversal)
+    PROJECT_PATH=$(find "$WORKSPACE" -maxdepth 3 -name "project.godot" -printf '%h\n' -quit 2>/dev/null || true)
+fi
+
+if [ -z "${PROJECT_PATH:-}" ] || [ ! -f "$PROJECT_PATH/project.godot" ]; then
+    echo "No Godot project found - LSP not started"
+    echo "Set GODOT_PROJECT_PATH or ensure project.godot exists in workspace"
+    exit 0
+fi
+
+echo "Starting Godot LSP on port $GODOT_LSP_PORT for: $PROJECT_PATH"
+nohup "$GODOT_BIN" --path "$PROJECT_PATH" --editor --headless --lsp-port "$GODOT_LSP_PORT" > "$LOG_FILE" 2>&1 &
+LSP_PID=$!
+echo "Godot LSP started (PID: $LSP_PID, log: $LOG_FILE)"

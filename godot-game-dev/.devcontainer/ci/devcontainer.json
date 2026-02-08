@@ -1,0 +1,16 @@
+{
+  "name": "Godot Game Dev",
+  "build": {
+    "dockerfile": "../../Dockerfile",
+    "context": "../.."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "geequlim.godot-tools"
+      ]
+    }
+  },
+  "postCreateCommand": "cp /usr/local/share/image-docs/UTILITIES.md .devcontainer/UTILITIES.md 2>/dev/null || true",
+  "postStartCommand": "/usr/local/bin/godot-lsp-start"
+}

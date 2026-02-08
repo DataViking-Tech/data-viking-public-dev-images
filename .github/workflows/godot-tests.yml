@@ -1,0 +1,34 @@
+name: "Godot: Tests"
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'godot-game-dev/**'
+      - '.github/workflows/godot-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'godot-game-dev/**'
+      - '.github/workflows/godot-tests.yml'
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r godot-game-dev/.devcontainer/requirements.txt
+
+      - name: Run render-bridges contract tests
+        env:
+          PYTHONPATH: godot-game-dev/lib/render-bridges
+        run: python -m unittest discover -s godot-game-dev/lib/render-bridges/tests -p "test_*.py" -v

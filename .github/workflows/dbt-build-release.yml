@@ -1,0 +1,101 @@
+name: "dbt-postgres: Build and Publish Release"
+
+on:
+  push:
+    tags:
+      - 'dbt-postgres/v[0-9]+.[0-9]+.[0-9]+'
+  workflow_call:
+    inputs:
+      tag:
+        description: 'The version tag to build (e.g. dbt-postgres/v1.0.0)'
+        required: true
+        type: string
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: dataviking-tech/dbt-postgres
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Extract and validate version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=manual" >> $GITHUB_OUTPUT
+            echo "MAJOR=" >> $GITHUB_OUTPUT
+            echo "MINOR=" >> $GITHUB_OUTPUT
+          else
+            if [ -n "${{ inputs.tag }}" ]; then
+              RAW_TAG="${{ inputs.tag }}"
+            else
+              RAW_TAG=${GITHUB_REF#refs/tags/}
+            fi
+
+            # Strip image prefix to get bare version
+            TAG="${RAW_TAG#dbt-postgres/}"
+
+            if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "Error: Tag must match semantic version format (vX.Y.Z), got: $TAG"
+              exit 1
+            fi
+            echo "VERSION=${TAG}" >> $GITHUB_OUTPUT
+
+            # Extract major and minor versions for tags
+            VERSION_NUMS=${TAG#v}
+            MAJOR=$(echo $VERSION_NUMS | cut -d. -f1)
+            MINOR=$(echo $VERSION_NUMS | cut -d. -f1-2)
+            echo "MAJOR=v${MAJOR}" >> $GITHUB_OUTPUT
+            echo "MINOR=v${MINOR}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push dev container image
+        uses: devcontainers/ci@v0.3
+        with:
+          configFile: dbt-postgres/.devcontainer/ci/devcontainer.json
+          imageName: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          imageTag: ${{ steps.version.outputs.VERSION }},${{ steps.version.outputs.MINOR }},${{ steps.version.outputs.MAJOR }}
+          push: always
+          cacheFrom: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
+
+      - name: Test image
+        if: steps.version.outputs.VERSION != 'manual'
+        run: |
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }} \
+            /usr/local/bin/validate-tools.sh
+
+      - name: Image summary
+        if: steps.version.outputs.VERSION != 'manual'
+        run: |
+          echo "### 🚀 dbt-postgres Release Image Published!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}\` (immutable)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.MINOR }}\` (tracks patch)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.MAJOR }}\` (tracks minor)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Usage in devcontainer.json:**" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo '{' >> $GITHUB_STEP_SUMMARY
+          echo '  "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.MINOR }}"' >> $GITHUB_STEP_SUMMARY
+          echo '}' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
