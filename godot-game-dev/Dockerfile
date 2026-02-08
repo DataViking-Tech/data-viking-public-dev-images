@@ -44,7 +44,7 @@ RUN echo "Installing Godot ${GODOT_VERSION}..." \
 
 # Install game-specific Python packages via uv (target Python 3.11 from base image)
 COPY .devcontainer/requirements.txt /tmp/requirements.txt
-RUN uv pip install --system --break-system-packages --python 3.11 -r /tmp/requirements.txt && rm /tmp/requirements.txt
+RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
 # Install render-bridges (GPU rendering bridge for Linux→Windows host)
 COPY lib/render-bridges/render_bridge /opt/render-bridges/render_bridge
