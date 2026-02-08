@@ -14,7 +14,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: dataviking-tech/godot-game-dev
+  IMAGE_NAME: dataviking-tech/godot-game-dev-image
 
 jobs:
   build-and-push:

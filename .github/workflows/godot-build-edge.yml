@@ -13,7 +13,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: dataviking-tech/godot-game-dev
+  IMAGE_NAME: dataviking-tech/godot-game-dev-image
 
 # Prevent multiple edge builds from running simultaneously
 concurrency:

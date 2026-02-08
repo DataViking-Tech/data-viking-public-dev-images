@@ -13,8 +13,8 @@ This guide helps you upgrade between different versions of the Godot Game Develo
 2. **Update devcontainer.json:**
    ```json
    {
-   - "image": "ghcr.io/dataviking-tech/godot-game-dev-base-image:v1.0.0",
-   + "image": "ghcr.io/dataviking-tech/godot-game-dev-base-image:v1.1.0",
+   - "image": "ghcr.io/dataviking-tech/godot-game-dev-image:v1.0.0",
+   + "image": "ghcr.io/dataviking-tech/godot-game-dev-image:v1.1.0",
      "remoteEnv": {
    -   "EXPECTED_IMAGE_VERSION": "v1.0.0"
    +   "EXPECTED_IMAGE_VERSION": "v1.1.0"
@@ -43,7 +43,7 @@ This guide helps you upgrade between different versions of the Godot Game Develo
    ```json
    {
      "name": "My Project",
-     "image": "ghcr.io/dataviking-tech/godot-game-dev-base-image:v1.0.0",
+     "image": "ghcr.io/dataviking-tech/godot-game-dev-image:v1.0.0",
      "remoteEnv": {
        "EXPECTED_IMAGE_VERSION": "v1.0.0"
      }
@@ -78,7 +78,7 @@ If you encounter issues with a new version:
 1. **Revert devcontainer.json:**
    ```json
    {
-     "image": "ghcr.io/dataviking-tech/godot-game-dev-base-image:v1.0.0",
+     "image": "ghcr.io/dataviking-tech/godot-game-dev-image:v1.0.0",
      "remoteEnv": {
        "EXPECTED_IMAGE_VERSION": "v1.0.0"
      }
@@ -87,7 +87,7 @@ If you encounter issues with a new version:
 
 2. **Rebuild container**
 
-3. **Report issue:** https://github.com/DataViking-Tech/godot-game-dev-base-image/issues
+3. **Report issue:** https://github.com/DataViking-Tech/data-viking-public-dev-images/issues
 
 ---
 
@@ -100,10 +100,10 @@ If you encounter issues with a new version:
 **Solution:**
 ```bash
 # Check available versions
-docker search ghcr.io/dataviking-tech/godot-game-dev-base-image
+docker search ghcr.io/dataviking-tech/godot-game-dev-image
 
 # Or check GitHub releases
-# https://github.com/DataViking-Tech/godot-game-dev-base-image/releases
+# https://github.com/DataViking-Tech/data-viking-public-dev-images/releases
 
 # Rollback to previous version
 ```
@@ -115,7 +115,7 @@ docker search ghcr.io/dataviking-tech/godot-game-dev-base-image
 **Solution:**
 ```bash
 # Force remove cached image
-docker image rm ghcr.io/dataviking-tech/godot-game-dev-base-image:v1.1.0
+docker image rm ghcr.io/dataviking-tech/godot-game-dev-image:v1.1.0
 
 # Rebuild container (forces fresh pull)
 ```
@@ -125,7 +125,7 @@ docker image rm ghcr.io/dataviking-tech/godot-game-dev-base-image:v1.1.0
 **Problem:** New image might be larger or have additional setup
 
 **Solution:**
-1. Check image size: `docker images | grep godot-game-dev-base`
+1. Check image size: `docker images | grep godot-game-dev-image`
 2. Review CHANGELOG for performance notes
 3. Report if significantly slower than expected
 

@@ -22,7 +22,7 @@ Custom devcontainer image with pre-installed game development tools for fast con
 ```json
 {
   "name": "My Game Project",
-  "image": "ghcr.io/dataviking-tech/godot-game-dev:edge",
+  "image": "ghcr.io/dataviking-tech/godot-game-dev-image:edge",
 
   "customizations": {
     "vscode": {
