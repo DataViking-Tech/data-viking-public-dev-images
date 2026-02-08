@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dbt via uv into existing Python 3.11
-RUN uv pip install --system --break-system-packages --python 3.11 \
+# Install dbt via uv into the uv-managed Python (not Debian system Python)
+RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 \
     dbt-core \
     dbt-postgres
 
