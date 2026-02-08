@@ -43,7 +43,7 @@ test_command() {
 }
 
 echo "dbt Tools:"
-test_command "dbt" "dbt --version" "dbt"
+test_command "dbt" "dbt --version" "Core"
 test_command "dbt-postgres adapter" "dbt --version" "postgres"
 
 echo ""

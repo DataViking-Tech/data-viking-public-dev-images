@@ -6,7 +6,7 @@ Public dev container images extending [ai-dev-base](https://github.com/DataVikin
 
 | Image | Description | Registry |
 |-------|-------------|----------|
-| [godot-game-dev](godot-game-dev/) | Godot 4.5.1 game development environment | `ghcr.io/dataviking-tech/godot-game-dev` |
+| [godot-game-dev](godot-game-dev/) | Godot 4.5.1 game development environment | `ghcr.io/dataviking-tech/godot-game-dev-image` |
 | [dbt-postgres](dbt-postgres/) | dbt-core + dbt-postgres data engineering environment | `ghcr.io/dataviking-tech/dbt-postgres` |
 
 ## Architecture

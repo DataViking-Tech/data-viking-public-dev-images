@@ -16,10 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dbt via uv into existing Python 3.11
-RUN uv pip install --system --break-system-packages --python 3.11 \
+# Install dbt via uv into the uv-managed Python (not Debian system Python)
+# Scripts land in the uv Python's bin dir, so we symlink dbt into /usr/local/bin
+RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 \
     dbt-core \
-    dbt-postgres
+    dbt-postgres \
+    && ln -sf "$(dirname "$(readlink -f /usr/local/bin/python3)")/dbt" /usr/local/bin/dbt
 
 # Copy and run validation script
 COPY tests/validate-tools.sh /usr/local/bin/validate-tools.sh

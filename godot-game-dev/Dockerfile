@@ -20,8 +20,8 @@ RUN apt-get update && apt-get install -y \
     # Godot runtime dependencies
     libx11-6 libxcursor1 libxinerama1 libxrandr2 libgl1 \
     libegl1 libgles2 libglx0 \
-    # Additional Godot libraries (t64 variants for Ubuntu 24.04)
-    libfontconfig1 libasound2t64 libpulse0 \
+    # Additional Godot libraries
+    libfontconfig1 libasound2 libpulse0 \
     libxrender1 libxi6 libxkbcommon0 libxfixes3 \
     libxxf86vm1 libsm6 \
     # Multimedia tools
@@ -44,7 +44,7 @@ RUN echo "Installing Godot ${GODOT_VERSION}..." \
 
 # Install game-specific Python packages via uv (target Python 3.11 from base image)
 COPY .devcontainer/requirements.txt /tmp/requirements.txt
-RUN uv pip install --system --break-system-packages --python 3.11 -r /tmp/requirements.txt && rm /tmp/requirements.txt
+RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
 # Install render-bridges (GPU rendering bridge for Linux→Windows host)
 COPY lib/render-bridges/render_bridge /opt/render-bridges/render_bridge
