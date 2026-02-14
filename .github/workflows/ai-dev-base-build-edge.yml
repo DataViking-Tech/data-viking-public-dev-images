@@ -1,0 +1,101 @@
+name: "ai-dev-base: Build and Publish Edge"
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  push:
+    branches:
+      - main
+    paths:
+      - 'ai-dev-base/**'
+      - '.github/workflows/ai-dev-base-build-edge.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: dataviking-tech/ai-dev-base
+
+concurrency:
+  group: ai-dev-base-edge-build
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push edge image
+        uses: docker/build-push-action@v6
+        with:
+          context: ai-dev-base
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=edge
+          cache-from: type=gha,scope=ai-dev-base
+          cache-to: type=gha,mode=max,scope=ai-dev-base
+          provenance: false
+          sbom: false
+
+      - name: Test edge image
+        run: |
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge \
+            /usr/local/bin/test-tools.sh
+
+      - name: Validate devcontainer metadata
+        run: ./ai-dev-base/tests/validate-metadata.sh ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
+
+      - name: Image summary
+        run: |
+          echo "### ai-dev-base Edge Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** edge" >> $GITHUB_STEP_SUMMARY
+          echo "**Built from:** \`${{ github.ref }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge\`" >> $GITHUB_STEP_SUMMARY
+
+  trigger-downstream:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+
+    steps:
+      - name: Trigger downstream edge rebuilds
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflows = [
+              'godot-build-edge.yml',
+              'dbt-build-edge.yml'
+            ];
+            for (const workflow of workflows) {
+              console.log(`Dispatching ${workflow}...`);
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflow,
+                ref: 'main'
+              });
+              console.log(`Dispatched ${workflow}`);
+            }

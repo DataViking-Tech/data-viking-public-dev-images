@@ -11,13 +11,60 @@
       "depNameTemplate": "godotengine/godot",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^(?<version>\\d+\\.\\d+\\.\\d+)-stable$"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^ai-dev-base/Dockerfile$"],
+      "matchStrings": [
+        "ARG BEADS_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "steveyegge/beads",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^ai-dev-base/Dockerfile$"],
+      "matchStrings": [
+        "ARG GASTOWN_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "steveyegge/gastown",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^ai-dev-base/Dockerfile$"],
+      "matchStrings": [
+        "ARG CLAUDE_CODE_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "@anthropic-ai/claude-code",
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^ai-dev-base/Dockerfile$"],
+      "matchStrings": [
+        "ARG CODEX_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "@openai/codex",
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^ai-dev-base/Dockerfile$"],
+      "matchStrings": [
+        "ARG WRANGLER_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "wrangler",
+      "datasourceTemplate": "npm"
     }
   ],
   "packageRules": [
     {
       "matchDatasources": ["docker"],
       "matchPackageNames": ["ghcr.io/dataviking-tech/ai-dev-base"],
-      "schedule": ["before 9am on Monday"]
+      "enabled": false
     },
     {
       "matchDepNames": ["python"],

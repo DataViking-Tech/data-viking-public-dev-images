@@ -1,0 +1,52 @@
+name: "ai-dev-base: Tests"
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ai-dev-base/**'
+      - '.github/workflows/ai-dev-base-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ai-dev-base/**'
+      - '.github/workflows/ai-dev-base-tests.yml'
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests pyyaml watchdog python-dotenv
+
+      - name: Run ai-coding-utils tests
+        env:
+          PYTHONPATH: ai-dev-base/lib/ai-coding-utils
+        run: python -m unittest discover -s ai-dev-base/lib/ai-coding-utils/tests -p "test_*.py"
+
+      - name: Run dev-infra Python tests
+        env:
+          PYTHONPATH: ai-dev-base/lib/dev-infra
+        run: python -m unittest discover -s ai-dev-base/lib/dev-infra/tests -p "test_*.py"
+
+  bash-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Run credential cache tests
+        run: bash ai-dev-base/lib/dev-infra/tests/test_credential_cache_core.sh
+
+      - name: Run directories tests
+        run: bash ai-dev-base/lib/dev-infra/tests/test_directories.sh

@@ -1,0 +1,21 @@
+{
+  "name": "Project with Credential Caching",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+
+  "containerEnv": {
+    // Override default credential services (default: "github claude")
+    // Projects needing cloudflare can set this:
+    "CREDENTIAL_CACHE_SERVICES": "github cloudflare"
+  },
+
+  "mounts": [
+    "source=${localWorkspaceFolder}/temp/auth,target=/workspaces/${localWorkspaceFolderBasename}/temp/auth,type=bind",
+    "source=${localWorkspaceFolder}/temp/auth/gh-config,target=/home/vscode/.config/gh,type=bind"
+  ],
+
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  "postStartCommand": ".devcontainer/postStartCommand.sh"
+}
