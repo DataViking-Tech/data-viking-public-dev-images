@@ -16,7 +16,22 @@ Apply **exactly one** `semver:*` label to your PR before merging. Multiple semve
 
 ## Tag Format
 
-Tags are prefixed with the image name: `godot-game-dev/v1.2.3`, `dbt-postgres/v1.0.0`.
+Tags are prefixed with the image name:
+
+- `ai-dev-base/v1.0.0`
+- `godot-game-dev/v1.2.3`
+- `dbt-postgres/v1.0.0`
+
+## Chain Rebuilds
+
+When changes to `ai-dev-base/` are pushed to `main`, the edge build workflow:
+
+1. Builds and pushes `ghcr.io/dataviking-tech/ai-dev-base:edge`
+2. Automatically dispatches edge rebuilds for `godot-game-dev` and `dbt-postgres`
+
+This ensures downstream images always pick up base image changes without manual intervention.
+
+PRs that touch `ai-dev-base/` will also trigger downstream PR builds, which build the base image locally to validate compatibility before merge.
 
 ## Adding a New Image
 
