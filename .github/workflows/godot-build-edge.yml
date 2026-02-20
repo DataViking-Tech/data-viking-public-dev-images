@@ -31,6 +31,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -38,18 +44,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push dev container image
-        uses: devcontainers/ci@v0.3
+      - name: Build and push edge image
+        uses: docker/build-push-action@v6
         with:
-          configFile: godot-game-dev/.devcontainer/ci/devcontainer.json
-          imageName: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          imageTag: edge
-          push: always
-          cacheFrom: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
+          context: godot-game-dev
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=edge
+          cache-from: type=gha,scope=godot-game-dev
+          cache-to: type=gha,mode=max,scope=godot-game-dev
+          provenance: false
+          sbom: false
 
-      - name: Test edge image
+      - name: Test edge image (amd64)
         run: |
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge \
+          docker run --rm --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge \
+            /usr/local/bin/validate-tools.sh
+
+      - name: Test edge image (arm64)
+        run: |
+          docker run --rm --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge \
             /usr/local/bin/validate-tools.sh
 
       - name: Validate devcontainer metadata
@@ -57,12 +76,11 @@ jobs:
 
       - name: Image summary
         run: |
-          echo "### 🌙 Godot Edge Image Published!" >> $GITHUB_STEP_SUMMARY
+          echo "### Godot Edge Image Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Tag:** edge" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
           echo "**Built from:** \`${{ github.ref }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Use this tag for testing latest changes before they're released." >> $GITHUB_STEP_SUMMARY

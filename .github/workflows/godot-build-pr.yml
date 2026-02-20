@@ -39,14 +39,22 @@ jobs:
           echo "::notice::Skipping standalone godot-game-dev build — ai-dev-base also changed, downstream build handled by ai-dev-base PR workflow."
           exit 0
 
-      - name: Build dev container image (no push)
+      - name: Set up Docker Buildx
         if: steps.base-changes.outputs.base != 'true'
-        uses: devcontainers/ci@v0.3
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build amd64 image (no push)
+        if: steps.base-changes.outputs.base != 'true'
+        uses: docker/build-push-action@v6
         with:
-          configFile: godot-game-dev/.devcontainer/ci/devcontainer.json
-          imageName: ${{ env.IMAGE_NAME }}
-          imageTag: ${{ github.event.pull_request.number }}
-          push: never
+          context: godot-game-dev
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
+          cache-from: type=gha,scope=godot-game-dev
+          cache-to: type=gha,mode=max,scope=godot-game-dev
+          provenance: false
+          sbom: false
 
       - name: Run validate-tools.sh
         if: steps.base-changes.outputs.base != 'true'
@@ -57,3 +65,40 @@ jobs:
       - name: Validate devcontainer metadata
         if: steps.base-changes.outputs.base != 'true'
         run: ./godot-game-dev/tests/validate-metadata.sh ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
+
+  validate-arm64:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Check if ai-dev-base also changed
+        id: base-changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            base:
+              - 'ai-dev-base/**'
+
+      - name: Set up QEMU (arm64 emulation)
+        if: steps.base-changes.outputs.base != 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.base-changes.outputs.base != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build arm64 image (validation only)
+        if: steps.base-changes.outputs.base != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: godot-game-dev
+          push: false
+          platforms: linux/arm64
+          cache-from: type=gha,scope=godot-game-dev-arm64
+          cache-to: type=gha,mode=max,scope=godot-game-dev-arm64
+          provenance: false
+          sbom: false
