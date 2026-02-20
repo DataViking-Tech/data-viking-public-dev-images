@@ -70,6 +70,20 @@ if [ -d "$GASTOWN_HOME/.beads" ] && command -v bd >/dev/null 2>&1; then
   fi
 fi
 
+# --- Clean stale PID files from previous container lifecycle ---
+# The ~/gt/ volume survives container rebuilds but processes don't,
+# leaving PID files that refer to dead processes. Removing them before
+# gt up prevents the noisy "removed stale PID file" message.
+for _pidfile in "$GASTOWN_HOME"/daemon/daemon.pid "$GASTOWN_HOME"/daemon/dolt.pid; do
+  if [ -f "$_pidfile" ]; then
+    _pid=$(cat "$_pidfile" 2>/dev/null)
+    if [ -n "$_pid" ] && ! kill -0 "$_pid" 2>/dev/null; then
+      rm -f "$_pidfile"
+    fi
+  fi
+done
+rm -f "$GASTOWN_HOME"/daemon/daemon.lock
+
 # Unset BEADS_DIR so gt daemon's subprocess calls to bd discover town .beads/
 cd "$GASTOWN_HOME" && BEADS_DIR= gt up -q 2>/dev/null || true
 cd "$GASTOWN_HOME" && gt up -q 2>/dev/null || true
