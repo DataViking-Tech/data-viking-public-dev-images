@@ -31,6 +31,7 @@ FROM debian:bookworm-slim
 
 # Build arguments for external binary versions
 ARG GASTOWN_VERSION=0.7.0
+ARG DOLT_VERSION=1.82.3
 ARG CODEX_VERSION=0.101.0
 ARG WRANGLER_VERSION=4.65.0
 
@@ -99,7 +100,7 @@ RUN uv python install 3.11 && \
 # Install Beads binary (built from source in stage 1 with CGO_ENABLED=1)
 COPY --from=beads-builder /usr/local/bin/bd /usr/local/bin/bd
 
-# Install Gastown, Bun, and Claude Code binaries (single layer)
+# Install Gastown, Dolt, Bun, and Claude Code binaries (single layer)
 ENV BUN_INSTALL="/usr/local"
 RUN set -e && \
     # Gastown
@@ -108,6 +109,12 @@ RUN set -e && \
     tar xzf /tmp/gastown.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/gt && \
     rm /tmp/gastown.tar.gz && \
+    # Dolt (SQL server managed by gt for multi-agent beads access)
+    wget -q "https://github.com/dolthub/dolt/releases/download/v${DOLT_VERSION}/dolt-linux-${ARCH}.tar.gz" -O /tmp/dolt.tar.gz && \
+    tar xzf /tmp/dolt.tar.gz -C /tmp && \
+    mv /tmp/dolt-linux-${ARCH}/bin/dolt /usr/local/bin/dolt && \
+    chmod +x /usr/local/bin/dolt && \
+    rm -rf /tmp/dolt.tar.gz /tmp/dolt-linux-${ARCH} && \
     # Bun
     curl -fsSL https://bun.sh/install | bash && \
     # Claude Code

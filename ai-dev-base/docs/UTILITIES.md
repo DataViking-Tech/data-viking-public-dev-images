@@ -34,6 +34,7 @@
 | `gh`       | GitHub CLI — repo, PR, and issue management          |
 | `bd`       | Beads — issue tracking for AI workflows              |
 | `gt`       | Gastown — multi-agent orchestration CLI               |
+| `dolt`     | Dolt — SQL server for multi-agent beads access        |
 
 ## Embedded Components
 
