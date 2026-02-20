@@ -1,8 +1,8 @@
 FROM debian:bookworm-slim
 
 # Build arguments for external binary versions
-ARG BEADS_VERSION=0.49.3
-ARG GASTOWN_VERSION=0.5.0
+ARG BEADS_VERSION=0.52.0
+ARG GASTOWN_VERSION=0.7.0
 ARG CLAUDE_CODE_VERSION=2.1.41
 ARG CODEX_VERSION=0.101.0
 ARG WRANGLER_VERSION=4.65.0
@@ -84,14 +84,16 @@ RUN uv python install 3.11 && \
     ln -sf $(uv python find 3.11) /usr/local/bin/python3 && \
     ln -sf $(uv python find 3.11) /usr/local/bin/python
 
-# Install Beads binary
-RUN wget -q https://github.com/steveyegge/beads/releases/download/v${BEADS_VERSION}/beads_${BEADS_VERSION}_linux_amd64.tar.gz -O /tmp/beads.tar.gz && \
+# Install Beads binary (arch-aware: amd64 / arm64)
+RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
+    wget -q "https://github.com/steveyegge/beads/releases/download/v${BEADS_VERSION}/beads_${BEADS_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/beads.tar.gz && \
     tar xzf /tmp/beads.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/bd && \
     rm /tmp/beads.tar.gz
 
-# Install Gastown binary
-RUN wget -q https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/gastown_${GASTOWN_VERSION}_linux_amd64.tar.gz -O /tmp/gastown.tar.gz && \
+# Install Gastown binary (arch-aware: amd64 / arm64)
+RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
+    wget -q "https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/gastown.tar.gz && \
     tar xzf /tmp/gastown.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/gt && \
     rm /tmp/gastown.tar.gz
