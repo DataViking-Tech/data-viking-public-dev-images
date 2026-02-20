@@ -62,8 +62,8 @@ RUN ARCH=$(dpkg --print-architecture) && \
     # which adds a repo + runs apt-get update redundantly)
     NODE_VERSION=20.20.0 && \
     NODE_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
-    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
-      | tar xJ --strip-components=1 -C /usr/local && \
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" \
+      | tar xz --strip-components=1 -C /usr/local && \
     # GitHub CLI
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
       -o /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
