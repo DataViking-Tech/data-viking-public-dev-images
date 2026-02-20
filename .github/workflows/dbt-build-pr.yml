@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - 'dbt-postgres/**'
-      - 'ai-dev-base/**'
       - '.github/workflows/dbt-build-pr.yml'
 
 concurrency:
@@ -25,29 +24,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
-      - name: Check if ai-dev-base changed
-        id: base-changes
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            base:
-              - 'ai-dev-base/**'
-
-      - name: Set up Docker Buildx
-        if: steps.base-changes.outputs.base == 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build ai-dev-base locally
-        if: steps.base-changes.outputs.base == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: ai-dev-base
-          push: false
-          load: true
-          tags: ghcr.io/dataviking-tech/ai-dev-base:edge
-          provenance: false
-          sbom: false
 
       - name: Build dev container image (no push)
         uses: devcontainers/ci@v0.3

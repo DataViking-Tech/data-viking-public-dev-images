@@ -47,3 +47,80 @@ jobs:
 
       - name: Validate devcontainer metadata
         run: ./ai-dev-base/tests/validate-metadata.sh ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
+
+  build-dbt-postgres:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ai-dev-base locally
+        uses: docker/build-push-action@v6
+        with:
+          context: ai-dev-base
+          push: false
+          load: true
+          tags: ghcr.io/dataviking-tech/ai-dev-base:edge
+          cache-from: type=gha,scope=ai-dev-base
+          provenance: false
+          sbom: false
+
+      - name: Build dbt-postgres image (no push)
+        uses: devcontainers/ci@v0.3
+        with:
+          configFile: dbt-postgres/.devcontainer/ci/devcontainer.json
+          imageName: dbt-postgres-pr
+          imageTag: ${{ github.event.pull_request.number }}
+          push: never
+
+      - name: Run validate-tools.sh
+        run: |
+          docker run --rm dbt-postgres-pr:${{ github.event.pull_request.number }} \
+            /usr/local/bin/validate-tools.sh
+
+  build-godot-game-dev:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ai-dev-base locally
+        uses: docker/build-push-action@v6
+        with:
+          context: ai-dev-base
+          push: false
+          load: true
+          tags: ghcr.io/dataviking-tech/ai-dev-base:edge
+          cache-from: type=gha,scope=ai-dev-base
+          provenance: false
+          sbom: false
+
+      - name: Build godot-game-dev image (no push)
+        uses: devcontainers/ci@v0.3
+        with:
+          configFile: godot-game-dev/.devcontainer/ci/devcontainer.json
+          imageName: godot-game-dev-pr
+          imageTag: ${{ github.event.pull_request.number }}
+          push: never
+
+      - name: Run validate-tools.sh
+        run: |
+          docker run --rm godot-game-dev-pr:${{ github.event.pull_request.number }} \
+            /usr/local/bin/validate-tools.sh
+
+      - name: Validate devcontainer metadata
+        run: ./godot-game-dev/tests/validate-metadata.sh godot-game-dev-pr:${{ github.event.pull_request.number }}
