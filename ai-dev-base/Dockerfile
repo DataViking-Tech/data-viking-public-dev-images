@@ -100,9 +100,19 @@ RUN wget -q https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_V
 ENV BUN_INSTALL="/usr/local"
 RUN curl -fsSL https://bun.sh/install | bash
 
-# Install Claude Code CLI via native installer and copy to system PATH
-RUN curl -fsSL https://claude.ai/install.sh | bash \
-    && cp /root/.local/bin/claude /usr/local/bin/claude
+# Install Claude Code native binary directly (skip `claude install` which
+# sets up ~/.local/bin launchers and shell integration unsuitable for Docker)
+RUN set -e \
+    && GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" \
+    && ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') \
+    && PLATFORM="linux-${ARCH}" \
+    && VERSION=$(curl -fsSL "$GCS_BUCKET/latest") \
+    && MANIFEST=$(curl -fsSL "$GCS_BUCKET/$VERSION/manifest.json") \
+    && CHECKSUM=$(echo "$MANIFEST" | jq -r ".platforms[\"$PLATFORM\"].checksum") \
+    && curl -fsSL -o /tmp/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude" \
+    && echo "$CHECKSUM  /tmp/claude" | sha256sum -c - \
+    && mv /tmp/claude /usr/local/bin/claude \
+    && chmod +x /usr/local/bin/claude
 
 # Ensure Claude config dir exists with correct ownership in the image.
 # This prevents root-owned volume initialization on first container start.
