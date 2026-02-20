@@ -103,6 +103,12 @@ RUN curl -fsSL https://bun.sh/install | bash
 # Install Claude Code CLI globally (bun puts globals in $BUN_INSTALL/bin)
 RUN bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
+# Ensure Claude config dir exists with correct ownership in the image.
+# This prevents root-owned volume initialization on first container start.
+RUN mkdir -p /home/vscode/.claude && \
+    chown -R vscode:vscode /home/vscode/.claude && \
+    chmod 700 /home/vscode/.claude
+
 # Install OpenAI Codex CLI globally (bun puts globals in $BUN_INSTALL/bin)
 RUN bun install -g @openai/codex@${CODEX_VERSION}
 
