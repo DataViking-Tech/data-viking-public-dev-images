@@ -12,7 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends git gcc g++ lib
     rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch v${BEADS_VERSION} https://github.com/steveyegge/beads.git /src/beads
 WORKDIR /src/beads
-RUN CGO_ENABLED=1 go build -ldflags="-s -w \
+# Cache module downloads in their own layer (changes rarely)
+RUN go mod download
+# Build with cache mounts for Go build cache and module cache.
+# This makes rebuilds incremental even when the source layer changes.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=1 go build -ldflags="-s -w \
     -X main.Version=${BEADS_VERSION} \
     -X main.Commit=$(git rev-parse HEAD) \
     -X main.Branch=$(git rev-parse --abbrev-ref HEAD)" \
@@ -28,72 +34,56 @@ ARG GASTOWN_VERSION=0.7.0
 ARG CODEX_VERSION=0.101.0
 ARG WRANGLER_VERSION=4.65.0
 
-# Create vscode user with sudo access (replaces devcontainers base)
+# Create vscode user, set up locale, and install all system packages in a
+# single apt transaction. No build-essential — all compiled binaries come
+# from stage 1 or pre-built downloads. Reintroduce if a runtime C compiler
+# is ever needed.
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends sudo && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    sudo locales \
+    ca-certificates gnupg2 openssh-client git curl wget make \
+    tmux sqlite3 jq bash-completion procps unzip libicu72 && \
+    # --- vscode user ---
     groupadd --gid 1000 vscode && \
     useradd --uid 1000 --gid 1000 -m -s /bin/bash vscode && \
     echo "vscode ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/vscode && \
     chmod 0440 /etc/sudoers.d/vscode && \
-    rm -rf /var/lib/apt/lists/*
-
-# Set up locale (bookworm-slim has none)
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends locales && \
-    sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && \
-    locale-gen && \
+    # --- locale ---
+    sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen && \
     rm -rf /var/lib/apt/lists/*
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 
-# Install system dependencies (excluding nodejs - installed separately below)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    gnupg2 \
-    openssh-client \
-    git \
-    curl \
-    wget \
-    build-essential \
-    tmux \
-    sqlite3 \
-    jq \
-    bash-completion \
-    procps \
-    unzip \
-    libicu72 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Node.js 20 LTS via NodeSource (wrangler requires Node 20+)
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install GitHub CLI
-RUN (type -p wget >/dev/null || (apt-get update && apt-get install -y wget)) && \
+# Register all external apt repos, then install everything in one pass.
+# Node.js is installed as a standalone binary to avoid the NodeSource setup
+# script which runs its own apt-get update internally.
+RUN ARCH=$(dpkg --print-architecture) && \
     mkdir -p -m 755 /etc/apt/keyrings && \
-    out=$(mktemp) && wget -qO "$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg && \
-    cat "$out" | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null && \
+    # Node.js 20 LTS — direct binary download (avoids NodeSource setup_20.x
+    # which adds a repo + runs apt-get update redundantly)
+    NODE_VERSION=20.20.0 && \
+    NODE_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" \
+      | tar xz --strip-components=1 -C /usr/local && \
+    # GitHub CLI
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
     chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null && \
-    apt-get update && apt-get install -y gh && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install Docker CLI + Compose plugin (no daemon — uses host socket via mount)
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" | \
-    tee /etc/apt/sources.list.d/docker.list && \
+    echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list && \
+    # Docker CLI
+    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
+    echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    # Doppler CLI
+    curl -sLf --retry 3 --tlsv1.2 --proto "=https" \
+      'https://packages.doppler.com/public/cli/gpg.DE2A7741A397C129.key' | \
+      gpg --dearmor -o /etc/apt/keyrings/doppler.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/doppler.gpg] https://packages.doppler.com/public/cli/deb/debian any-version main" \
+      > /etc/apt/sources.list.d/doppler-cli.list && \
+    # Single install for all external apt packages
     apt-get update && apt-get install -y --no-install-recommends \
-    docker-ce-cli \
-    docker-compose-plugin \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd -f docker && usermod -aG docker vscode
-
-# Install Doppler CLI (secrets management)
-RUN curl -sLf --retry 3 --tlsv1.2 --proto "=https" 'https://packages.doppler.com/public/cli/gpg.DE2A7741A397C129.key' | \
-    gpg --dearmor -o /etc/apt/keyrings/doppler.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/doppler.gpg] https://packages.doppler.com/public/cli/deb/debian any-version main" | \
-    tee /etc/apt/sources.list.d/doppler-cli.list && \
-    apt-get update && apt-get install -y doppler && \
+      gh docker-ce-cli docker-compose-plugin doppler && \
+    groupadd -f docker && usermod -aG docker vscode && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv (Python package manager) to system-wide location
@@ -109,30 +99,31 @@ RUN uv python install 3.11 && \
 # Install Beads binary (built from source in stage 1 with CGO_ENABLED=1)
 COPY --from=beads-builder /usr/local/bin/bd /usr/local/bin/bd
 
-# Install Gastown binary (arch-aware: amd64 / arm64)
-RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
+# Install Gastown, Bun, and Claude Code binaries (single layer)
+ENV BUN_INSTALL="/usr/local"
+RUN set -e && \
+    # Gastown
+    ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
     wget -q "https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/gastown.tar.gz && \
     tar xzf /tmp/gastown.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/gt && \
-    rm /tmp/gastown.tar.gz
+    rm /tmp/gastown.tar.gz && \
+    # Bun
+    curl -fsSL https://bun.sh/install | bash && \
+    # Claude Code
+    GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" && \
+    CC_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
+    PLATFORM="linux-${CC_ARCH}" && \
+    VERSION=$(curl -fsSL "$GCS_BUCKET/latest") && \
+    MANIFEST=$(curl -fsSL "$GCS_BUCKET/$VERSION/manifest.json") && \
+    CHECKSUM=$(echo "$MANIFEST" | jq -r ".platforms[\"$PLATFORM\"].checksum") && \
+    curl -fsSL -o /tmp/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude" && \
+    echo "$CHECKSUM  /tmp/claude" | sha256sum -c - && \
+    mv /tmp/claude /usr/local/bin/claude && \
+    chmod +x /usr/local/bin/claude
 
-# Install Bun to system-wide location (accessible by all users including vscode)
-ENV BUN_INSTALL="/usr/local"
-RUN curl -fsSL https://bun.sh/install | bash
-
-# Install Claude Code native binary directly (skip `claude install` which
-# sets up ~/.local/bin launchers and shell integration unsuitable for Docker)
-RUN set -e \
-    && GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" \
-    && ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') \
-    && PLATFORM="linux-${ARCH}" \
-    && VERSION=$(curl -fsSL "$GCS_BUCKET/latest") \
-    && MANIFEST=$(curl -fsSL "$GCS_BUCKET/$VERSION/manifest.json") \
-    && CHECKSUM=$(echo "$MANIFEST" | jq -r ".platforms[\"$PLATFORM\"].checksum") \
-    && curl -fsSL -o /tmp/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude" \
-    && echo "$CHECKSUM  /tmp/claude" | sha256sum -c - \
-    && mv /tmp/claude /usr/local/bin/claude \
-    && chmod +x /usr/local/bin/claude
+# Install JS CLI tools via bun (single layer)
+RUN bun install -g @openai/codex@${CODEX_VERSION} wrangler@${WRANGLER_VERSION}
 
 # Ensure Claude config dir exists with correct ownership in the image.
 # This prevents root-owned volume initialization on first container start.
@@ -140,70 +131,40 @@ RUN mkdir -p /home/vscode/.claude && \
     chown -R vscode:vscode /home/vscode/.claude && \
     chmod 700 /home/vscode/.claude
 
-# Install OpenAI Codex CLI globally (bun puts globals in $BUN_INSTALL/bin)
-RUN bun install -g @openai/codex@${CODEX_VERSION}
-
-# Install Wrangler (Cloudflare CLI) globally
-RUN bun install -g wrangler@${WRANGLER_VERSION}
-
-# Embed ai-coding-utils (slack notifications + beads hooks)
-COPY lib/ai-coding-utils/slack /opt/ai-coding-utils/slack
-COPY lib/ai-coding-utils/beads /opt/ai-coding-utils/beads
-
-# Install Python dependencies for embedded libraries
-RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 \
-    requests>=2.28.0 \
-    pyyaml>=6.0 \
-    watchdog>=3.0.0 \
-    python-dotenv>=1.0.0
-
-# Add ai-coding-utils to PYTHONPATH
-ENV PYTHONPATH="/opt/ai-coding-utils"
-
-# Embed Claude agent configurations for downstream projects
-COPY lib/agent-configs/claude-agents/ /opt/agent-configs/claude-agents/
-
-# Embed agent configs (GitHub Copilot workspace agents)
-COPY lib/agent-configs/github-agents/ /opt/agent-configs/github-agents/
-
-# Embed dev-infra (devcontainer components, secrets manager, project setup)
-COPY lib/dev-infra/components/ /opt/dev-infra/
-COPY lib/dev-infra/secrets /opt/dev-infra/secrets
-COPY lib/dev-infra/setup /opt/dev-infra/setup
-RUN chmod +x /opt/dev-infra/*.sh /opt/dev-infra/setup/*.sh \
-    && chmod +x /opt/ai-coding-utils/beads/setup/ensure_beads.sh \
-    && chmod +x /opt/dev-infra/setup/ensure_gastown.sh \
-    && chmod +x /opt/dev-infra/setup/ensure_crew.sh \
-    && chmod +x /opt/dev-infra/setup/start_gastown_services.sh \
-    && chmod +x /opt/dev-infra/setup/start_beads_notifier.sh \
-    && chmod +x /opt/dev-infra/setup/daemon_watchdog.sh
-
-# Copy utility documentation and defaults into the image for downstream layering
+# Embed all local files (grouped to reduce layers, ordered by change frequency)
 COPY docs/UTILITIES.md /usr/local/share/image-docs/UTILITIES.md
 COPY docs/.gitattributes /usr/local/share/image-docs/.gitattributes
 COPY docs/CLAUDE.md /usr/local/share/image-docs/CLAUDE.md
 COPY docs/crew.json /usr/local/share/image-docs/crew.json
-
-# Copy auto-source script
+COPY lib/ai-coding-utils/slack /opt/ai-coding-utils/slack
+COPY lib/ai-coding-utils/beads /opt/ai-coding-utils/beads
+COPY lib/agent-configs/claude-agents/ /opt/agent-configs/claude-agents/
+COPY lib/agent-configs/github-agents/ /opt/agent-configs/github-agents/
+COPY lib/dev-infra/components/ /opt/dev-infra/
+COPY lib/dev-infra/secrets /opt/dev-infra/secrets
+COPY lib/dev-infra/setup /opt/dev-infra/setup
 COPY lib/dev-infra/profile.sh /etc/profile.d/ai-dev-utils.sh
-RUN chmod +x /etc/profile.d/ai-dev-utils.sh
+COPY tests/test-tools.sh /usr/local/bin/test-tools.sh
 
-# Source ai-dev-utils.sh from bash.bashrc so non-login interactive shells get functions too
-RUN echo '' >> /etc/bash.bashrc && \
+# Add ai-coding-utils to PYTHONPATH (must be set before test-tools.sh runs)
+ENV PYTHONPATH="/opt/ai-coding-utils"
+
+# Install Python deps, set permissions, configure shell, validate tools —
+# single layer to minimize overhead.
+RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 \
+    requests>=2.28.0 pyyaml>=6.0 watchdog>=3.0.0 python-dotenv>=1.0.0 && \
+    chmod +x /opt/dev-infra/*.sh /opt/dev-infra/setup/*.sh \
+    /opt/ai-coding-utils/beads/setup/ensure_beads.sh \
+    /etc/profile.d/ai-dev-utils.sh \
+    /usr/local/bin/test-tools.sh && \
+    echo '' >> /etc/bash.bashrc && \
     echo '# Source AI dev utilities for all interactive shells' >> /etc/bash.bashrc && \
     echo 'if [ -f /etc/profile.d/ai-dev-utils.sh ]; then' >> /etc/bash.bashrc && \
     echo '    . /etc/profile.d/ai-dev-utils.sh' >> /etc/bash.bashrc && \
-    echo 'fi' >> /etc/bash.bashrc
-
-# Copy and run test script
-COPY tests/test-tools.sh /usr/local/bin/test-tools.sh
-RUN chmod +x /usr/local/bin/test-tools.sh && \
-    /usr/local/bin/test-tools.sh
-
-# Validate tools are accessible as the vscode user (catches permission issues)
-USER vscode
-RUN /usr/local/bin/test-tools.sh
-USER root
+    echo 'fi' >> /etc/bash.bashrc && \
+    # Validate tools as root and vscode in the same layer
+    /usr/local/bin/test-tools.sh && \
+    su -c /usr/local/bin/test-tools.sh vscode
 
 # Bake devcontainer metadata into image for VS Code extensions
 LABEL devcontainer.metadata='[{ \
@@ -238,8 +199,5 @@ LABEL devcontainer.metadata='[{ \
   "postStartCommand": "/opt/dev-infra/setup/start_gastown_services.sh; /opt/dev-infra/setup/start_beads_notifier.sh" \
 }]'
 
-# Set working directory
 WORKDIR /workspace
-
-# Default shell
 CMD ["/bin/bash"]
