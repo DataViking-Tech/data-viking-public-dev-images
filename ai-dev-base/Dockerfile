@@ -102,7 +102,7 @@ RUN curl -fsSL https://bun.sh/install | bash
 
 # Install Claude Code CLI via native installer and symlink to system PATH
 RUN curl -fsSL https://claude.ai/install.sh | bash \
-    && ln -sf /root/.claude/bin/claude /usr/local/bin/claude
+    && ln -sf /root/.local/bin/claude /usr/local/bin/claude
 
 # Install OpenAI Codex CLI globally (bun puts globals in $BUN_INSTALL/bin)
 RUN bun install -g @openai/codex@${CODEX_VERSION}
