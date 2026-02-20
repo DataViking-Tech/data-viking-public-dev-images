@@ -146,6 +146,9 @@ COPY lib/dev-infra/setup /opt/dev-infra/setup
 COPY lib/dev-infra/profile.sh /etc/profile.d/ai-dev-utils.sh
 COPY tests/test-tools.sh /usr/local/bin/test-tools.sh
 
+# Add ai-coding-utils to PYTHONPATH (must be set before test-tools.sh runs)
+ENV PYTHONPATH="/opt/ai-coding-utils"
+
 # Install Python deps, set permissions, configure shell, validate tools —
 # single layer to minimize overhead.
 RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 \
@@ -162,9 +165,6 @@ RUN uv pip install --system --break-system-packages --python /usr/local/bin/pyth
     # Validate tools as root and vscode in the same layer
     /usr/local/bin/test-tools.sh && \
     su -c /usr/local/bin/test-tools.sh vscode
-
-# Add ai-coding-utils to PYTHONPATH
-ENV PYTHONPATH="/opt/ai-coding-utils"
 
 # Bake devcontainer metadata into image for VS Code extensions
 LABEL devcontainer.metadata='[{ \
