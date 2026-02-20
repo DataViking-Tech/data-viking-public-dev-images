@@ -25,7 +25,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Check if ai-dev-base also changed
+        id: base-changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            base:
+              - 'ai-dev-base/**'
+
+      - name: Skip if ai-dev-base changed (handled by ai-dev-base PR workflow)
+        if: steps.base-changes.outputs.base == 'true'
+        run: |
+          echo "::notice::Skipping standalone godot-game-dev build — ai-dev-base also changed, downstream build handled by ai-dev-base PR workflow."
+          exit 0
+
       - name: Build dev container image (no push)
+        if: steps.base-changes.outputs.base != 'true'
         uses: devcontainers/ci@v0.3
         with:
           configFile: godot-game-dev/.devcontainer/ci/devcontainer.json
@@ -34,9 +49,11 @@ jobs:
           push: never
 
       - name: Run validate-tools.sh
+        if: steps.base-changes.outputs.base != 'true'
         run: |
           docker run --rm ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }} \
             /usr/local/bin/validate-tools.sh
 
       - name: Validate devcontainer metadata
+        if: steps.base-changes.outputs.base != 'true'
         run: ./godot-game-dev/tests/validate-metadata.sh ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
