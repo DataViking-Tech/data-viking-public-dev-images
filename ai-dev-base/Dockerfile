@@ -1,9 +1,30 @@
+###############################################################################
+# Stage 1: Build beads (bd) from source with CGO_ENABLED=1
+#
+# The beads release binaries are built with the gms_pure_go tag on arm64,
+# which disables CGO and breaks the embedded Dolt database engine.
+# Building from source ensures CGO is enabled on all architectures.
+# See: https://github.com/steveyegge/beads/issues/XXX
+###############################################################################
+FROM golang:1.25-bookworm AS beads-builder
+ARG BEADS_VERSION=0.52.0
+RUN apt-get update && apt-get install -y --no-install-recommends git gcc g++ libicu-dev && \
+    rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch v${BEADS_VERSION} https://github.com/steveyegge/beads.git /src/beads
+WORKDIR /src/beads
+RUN CGO_ENABLED=1 go build -ldflags="-s -w \
+    -X main.Version=${BEADS_VERSION} \
+    -X main.Commit=$(git rev-parse HEAD) \
+    -X main.Branch=$(git rev-parse --abbrev-ref HEAD)" \
+    -o /usr/local/bin/bd ./cmd/bd
+
+###############################################################################
+# Stage 2: Final image
+###############################################################################
 FROM debian:bookworm-slim
 
 # Build arguments for external binary versions
-ARG BEADS_VERSION=0.52.0
 ARG GASTOWN_VERSION=0.7.0
-ARG CLAUDE_CODE_VERSION=2.1.41
 ARG CODEX_VERSION=0.101.0
 ARG WRANGLER_VERSION=4.65.0
 
@@ -39,6 +60,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash-completion \
     procps \
     unzip \
+    libicu72 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 20 LTS via NodeSource (wrangler requires Node 20+)
@@ -84,12 +106,8 @@ RUN uv python install 3.11 && \
     ln -sf $(uv python find 3.11) /usr/local/bin/python3 && \
     ln -sf $(uv python find 3.11) /usr/local/bin/python
 
-# Install Beads binary (arch-aware: amd64 / arm64)
-RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
-    wget -q "https://github.com/steveyegge/beads/releases/download/v${BEADS_VERSION}/beads_${BEADS_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/beads.tar.gz && \
-    tar xzf /tmp/beads.tar.gz -C /usr/local/bin && \
-    chmod +x /usr/local/bin/bd && \
-    rm /tmp/beads.tar.gz
+# Install Beads binary (built from source in stage 1 with CGO_ENABLED=1)
+COPY --from=beads-builder /usr/local/bin/bd /usr/local/bin/bd
 
 # Install Gastown binary (arch-aware: amd64 / arm64)
 RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
