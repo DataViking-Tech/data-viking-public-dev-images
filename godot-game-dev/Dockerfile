@@ -32,14 +32,15 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Godot
-RUN echo "Installing Godot ${GODOT_VERSION}..." \
-    && wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" \
-    && unzip -q "Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -d /opt \
-    && mv "/opt/Godot_v${GODOT_VERSION}-stable_linux.x86_64" /opt/godot \
+# Install Godot (arch-aware: x86_64 / arm64)
+RUN GODOT_ARCH=$(uname -m | sed 's/aarch64/arm64/') && \
+    echo "Installing Godot ${GODOT_VERSION} (${GODOT_ARCH})..." \
+    && wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" \
+    && unzip -q "Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" -d /opt \
+    && mv "/opt/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}" /opt/godot \
     && chmod +x /opt/godot \
     && ln -s /opt/godot /usr/local/bin/godot \
-    && rm "Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" \
+    && rm "Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" \
     && godot --version
 
 # Install game-specific Python packages via uv (target Python 3.11 from base image)
