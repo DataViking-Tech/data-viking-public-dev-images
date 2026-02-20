@@ -68,6 +68,9 @@ test_command "Bun" "bun --version" "[0-9]"
 # Test Gastown
 test_command "Gastown (gt)" "gt --version" "gt version"
 
+# Test Dolt
+test_command "Dolt" "dolt version" "[0-9]"
+
 # Test tmux
 test_command "tmux" "tmux -V" "tmux"
 
