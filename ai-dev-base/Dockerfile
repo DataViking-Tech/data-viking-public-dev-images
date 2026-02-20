@@ -12,7 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends git gcc g++ lib
     rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch v${BEADS_VERSION} https://github.com/steveyegge/beads.git /src/beads
 WORKDIR /src/beads
-RUN CGO_ENABLED=1 go build -ldflags="-s -w \
+# Cache module downloads in their own layer (changes rarely)
+RUN go mod download
+# Build with cache mounts for Go build cache and module cache.
+# This makes rebuilds incremental even when the source layer changes.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=1 go build -ldflags="-s -w \
     -X main.Version=${BEADS_VERSION} \
     -X main.Commit=$(git rev-parse HEAD) \
     -X main.Branch=$(git rev-parse --abbrev-ref HEAD)" \
