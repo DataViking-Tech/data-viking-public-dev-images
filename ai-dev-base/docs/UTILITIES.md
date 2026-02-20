@@ -12,7 +12,6 @@
 | `git`             | Distributed version control              |
 | `curl`            | URL data transfer                        |
 | `wget`            | Network file retrieval                   |
-| `build-essential` | GCC, make, and core build toolchain      |
 | `nodejs`          | JavaScript runtime (system package)      |
 | `tmux`            | Terminal multiplexer (agent sessions)    |
 | `sqlite3`         | SQLite CLI (convoy database queries)     |
