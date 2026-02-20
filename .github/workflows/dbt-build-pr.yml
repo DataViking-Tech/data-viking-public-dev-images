@@ -39,22 +39,14 @@ jobs:
           echo "::notice::Skipping standalone dbt-postgres build — ai-dev-base also changed, downstream build handled by ai-dev-base PR workflow."
           exit 0
 
-      - name: Set up Docker Buildx
+      - name: Build dev container image (no push)
         if: steps.base-changes.outputs.base != 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build amd64 image (no push)
-        if: steps.base-changes.outputs.base != 'true'
-        uses: docker/build-push-action@v6
+        uses: devcontainers/ci@v0.3
         with:
-          context: dbt-postgres
-          push: false
-          load: true
-          tags: ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
-          cache-from: type=gha,scope=dbt-postgres
-          cache-to: type=gha,mode=max,scope=dbt-postgres
-          provenance: false
-          sbom: false
+          configFile: dbt-postgres/.devcontainer/ci/devcontainer.json
+          imageName: ${{ env.IMAGE_NAME }}
+          imageTag: ${{ github.event.pull_request.number }}
+          push: never
 
       - name: Run validate-tools.sh
         if: steps.base-changes.outputs.base != 'true'

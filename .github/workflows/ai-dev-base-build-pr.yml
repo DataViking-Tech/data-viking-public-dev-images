@@ -79,20 +79,13 @@ jobs:
       - name: Load ai-dev-base image
         run: docker load -i /tmp/ai-dev-base.tar
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker
-
       - name: Build dbt-postgres image (no push)
-        uses: docker/build-push-action@v6
+        uses: devcontainers/ci@v0.3
         with:
-          context: dbt-postgres
-          push: false
-          load: true
-          tags: dbt-postgres-pr:${{ github.event.pull_request.number }}
-          provenance: false
-          sbom: false
+          configFile: dbt-postgres/.devcontainer/ci/devcontainer.json
+          imageName: dbt-postgres-pr
+          imageTag: ${{ github.event.pull_request.number }}
+          push: never
 
       - name: Run validate-tools.sh
         run: |
@@ -118,20 +111,13 @@ jobs:
       - name: Load ai-dev-base image
         run: docker load -i /tmp/ai-dev-base.tar
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker
-
       - name: Build godot-game-dev image (no push)
-        uses: docker/build-push-action@v6
+        uses: devcontainers/ci@v0.3
         with:
-          context: godot-game-dev
-          push: false
-          load: true
-          tags: godot-game-dev-pr:${{ github.event.pull_request.number }}
-          provenance: false
-          sbom: false
+          configFile: godot-game-dev/.devcontainer/ci/devcontainer.json
+          imageName: godot-game-dev-pr
+          imageTag: ${{ github.event.pull_request.number }}
+          push: never
 
       - name: Run validate-tools.sh
         run: |

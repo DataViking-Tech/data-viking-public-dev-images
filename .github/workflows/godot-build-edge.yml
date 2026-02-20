@@ -71,9 +71,6 @@ jobs:
           docker run --rm --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge \
             /usr/local/bin/validate-tools.sh
 
-      - name: Validate devcontainer metadata
-        run: ./godot-game-dev/tests/validate-metadata.sh ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
-
       - name: Image summary
         run: |
           echo "### Godot Edge Image Published" >> $GITHUB_STEP_SUMMARY

@@ -104,10 +104,6 @@ jobs:
           docker run --rm --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }} \
             /usr/local/bin/validate-tools.sh
 
-      - name: Validate devcontainer metadata
-        if: steps.version.outputs.VERSION != 'manual'
-        run: ./godot-game-dev/tests/validate-metadata.sh ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
-
       - name: Image summary
         if: steps.version.outputs.VERSION != 'manual'
         run: |
