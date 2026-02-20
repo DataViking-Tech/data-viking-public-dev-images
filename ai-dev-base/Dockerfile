@@ -100,8 +100,9 @@ RUN wget -q https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_V
 ENV BUN_INSTALL="/usr/local"
 RUN curl -fsSL https://bun.sh/install | bash
 
-# Install Claude Code CLI globally (bun puts globals in $BUN_INSTALL/bin)
-RUN bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+# Install Claude Code CLI via native installer and copy to system PATH
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && cp /root/.local/bin/claude /usr/local/bin/claude
 
 # Ensure Claude config dir exists with correct ownership in the image.
 # This prevents root-owned volume initialization on first container start.

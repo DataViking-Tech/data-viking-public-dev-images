@@ -34,7 +34,9 @@ jobs:
           context: ai-dev-base
           push: false
           load: true
-          tags: ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
+            ghcr.io/dataviking-tech/ai-dev-base:edge
           cache-from: type=gha,scope=ai-dev-base
           cache-to: type=gha,mode=max,scope=ai-dev-base
           provenance: false
@@ -47,3 +49,80 @@ jobs:
 
       - name: Validate devcontainer metadata
         run: ./ai-dev-base/tests/validate-metadata.sh ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
+
+      - name: Export ai-dev-base image for downstream jobs
+        run: docker save ghcr.io/dataviking-tech/ai-dev-base:edge -o /tmp/ai-dev-base.tar
+
+      - name: Upload ai-dev-base image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-dev-base-image
+          path: /tmp/ai-dev-base.tar
+          retention-days: 1
+
+  build-dbt-postgres:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Download ai-dev-base image
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-dev-base-image
+          path: /tmp
+
+      - name: Load ai-dev-base image
+        run: docker load -i /tmp/ai-dev-base.tar
+
+      - name: Build dbt-postgres image (no push)
+        uses: devcontainers/ci@v0.3
+        with:
+          configFile: dbt-postgres/.devcontainer/ci/devcontainer.json
+          imageName: dbt-postgres-pr
+          imageTag: ${{ github.event.pull_request.number }}
+          push: never
+
+      - name: Run validate-tools.sh
+        run: |
+          docker run --rm dbt-postgres-pr:${{ github.event.pull_request.number }} \
+            /usr/local/bin/validate-tools.sh
+
+  build-godot-game-dev:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Download ai-dev-base image
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-dev-base-image
+          path: /tmp
+
+      - name: Load ai-dev-base image
+        run: docker load -i /tmp/ai-dev-base.tar
+
+      - name: Build godot-game-dev image (no push)
+        uses: devcontainers/ci@v0.3
+        with:
+          configFile: godot-game-dev/.devcontainer/ci/devcontainer.json
+          imageName: godot-game-dev-pr
+          imageTag: ${{ github.event.pull_request.number }}
+          push: never
+
+      - name: Run validate-tools.sh
+        run: |
+          docker run --rm godot-game-dev-pr:${{ github.event.pull_request.number }} \
+            /usr/local/bin/validate-tools.sh
+
+      - name: Validate devcontainer metadata
+        run: ./godot-game-dev/tests/validate-metadata.sh godot-game-dev-pr:${{ github.event.pull_request.number }}
