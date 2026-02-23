@@ -89,6 +89,15 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+# Test dev-services command
+echo -n "Testing dev-services command... "
+if [ -x /usr/local/bin/dev-services ] && dev-services --help >/dev/null 2>&1; then
+    echo "✓ PASS"
+else
+    echo "✗ FAIL (dev-services not available)"
+    FAILURES=$((FAILURES + 1))
+fi
+
 # Test dev-infra components
 echo -n "Testing dev-infra components... "
 if [ -f /opt/dev-infra/credential_cache.sh ] && \

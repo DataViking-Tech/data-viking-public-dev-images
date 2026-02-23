@@ -36,6 +36,17 @@
 | `gt`       | Gastown — multi-agent orchestration CLI               |
 | `dolt`     | Dolt — SQL server for multi-agent beads access        |
 
+## Service Management
+
+| Command | Description |
+|---------|-------------|
+| `dev-services start` | Start all services (idempotent, runs automatically on container start) |
+| `dev-services stop` | Gracefully stop all services |
+| `dev-services restart` | Stop then start all services |
+| `dev-services status` | Show running state of each service |
+
+Manages: credential cache, beads daemon, gastown (daemon/dolt/agents), daemon watchdog, and Slack notifier.
+
 ## Embedded Components
 
 ### ai-coding-utils (`/opt/ai-coding-utils`)

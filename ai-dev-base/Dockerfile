@@ -164,6 +164,7 @@ RUN uv pip install --system --break-system-packages --python /usr/local/bin/pyth
     /opt/ai-coding-utils/beads/setup/ensure_beads.sh \
     /etc/profile.d/ai-dev-utils.sh \
     /usr/local/bin/test-tools.sh && \
+    ln -sf /opt/dev-infra/setup/dev-services.sh /usr/local/bin/dev-services && \
     echo '' >> /etc/bash.bashrc && \
     echo '# Source AI dev utilities for all interactive shells' >> /etc/bash.bashrc && \
     echo 'if [ -f /etc/profile.d/ai-dev-utils.sh ]; then' >> /etc/bash.bashrc && \
@@ -203,7 +204,7 @@ LABEL devcontainer.metadata='[{ \
     } \
   }, \
   "postCreateCommand": "cp /usr/local/share/image-docs/UTILITIES.md .devcontainer/UTILITIES.md 2>/dev/null || true; [ ! -f .gitattributes ] && cp /usr/local/share/image-docs/.gitattributes .gitattributes 2>/dev/null || true; [ ! -f CLAUDE.md ] && cp /usr/local/share/image-docs/CLAUDE.md CLAUDE.md 2>/dev/null || true; [ ! -f .devcontainer/crew.json ] && cp /usr/local/share/image-docs/crew.json .devcontainer/crew.json 2>/dev/null || true; /opt/ai-coding-utils/beads/setup/ensure_beads.sh; /opt/dev-infra/setup/ensure_gastown.sh; /opt/dev-infra/setup/ensure_crew.sh; /opt/dev-infra/setup/install-agents.sh", \
-  "postStartCommand": "/opt/dev-infra/setup/start_gastown_services.sh; /opt/dev-infra/setup/start_beads_notifier.sh" \
+  "postStartCommand": "dev-services start" \
 }]'
 
 WORKDIR /workspace
