@@ -16,9 +16,14 @@ Foundation Docker image for AI coding workflows with embedded utilities.
 
 ```json
 {
-  "image": "ghcr.io/dataviking-tech/ai-dev-base:edge"
+  "image": "ghcr.io/dataviking-tech/ai-dev-base:edge",
+  "initializeCommand": "docker pull ghcr.io/dataviking-tech/ai-dev-base:edge || podman pull ghcr.io/dataviking-tech/ai-dev-base:edge || echo Skipping pre-pull"
 }
 ```
+
+The `initializeCommand` runs on the host before the container is created, pre-pulling
+the latest image. It works on Windows (cmd.exe), macOS, and Linux, and supports both
+Docker and Podman without aliases.
 
 ## Versions
 
