@@ -32,7 +32,7 @@ FROM debian:bookworm-slim
 # Build arguments for external binary versions
 ARG GASTOWN_VERSION=0.7.0
 ARG DOLT_VERSION=1.82.3
-ARG CODEX_VERSION=0.101.0
+ARG CODEX_VERSION=0.105.0
 ARG WRANGLER_VERSION=4.65.0
 
 # Create vscode user, set up locale, and install all system packages in a
@@ -127,10 +127,18 @@ RUN set -e && \
     curl -fsSL -o /tmp/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude" && \
     echo "$CHECKSUM  /tmp/claude" | sha256sum -c - && \
     mv /tmp/claude /usr/local/bin/claude && \
-    chmod +x /usr/local/bin/claude
+    chmod +x /usr/local/bin/claude && \
+    # Codex CLI
+    CODEX_ARCH=$(uname -m) && \
+    curl -fsSL -o /tmp/codex.tar.gz \
+      "https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-${CODEX_ARCH}-unknown-linux-gnu.tar.gz" && \
+    tar xzf /tmp/codex.tar.gz -C /tmp && \
+    mv /tmp/codex-${CODEX_ARCH}-unknown-linux-gnu /usr/local/bin/codex && \
+    chmod +x /usr/local/bin/codex && \
+    rm /tmp/codex.tar.gz
 
 # Install JS CLI tools via bun (single layer)
-RUN bun install -g @openai/codex@${CODEX_VERSION} wrangler@${WRANGLER_VERSION}
+RUN bun install -g wrangler@${WRANGLER_VERSION}
 
 # Ensure Claude config dir exists with correct ownership in the image.
 # This prevents root-owned volume initialization on first container start.
@@ -207,5 +215,8 @@ LABEL devcontainer.metadata='[{ \
   "postStartCommand": "dev-services start" \
 }]'
 
-WORKDIR /workspace
+# Ensure vscode owns /workspaces so it can create dirs freely (e.g. temp/auth)
+RUN mkdir -p /workspaces && chown vscode:vscode /workspaces
+
+WORKDIR /workspaces
 CMD ["/bin/bash"]
