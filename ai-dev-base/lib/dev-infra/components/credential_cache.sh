@@ -37,8 +37,11 @@ setup_credential_cache() {
   local services=("$@")
   local failed_services=()
 
-  # Create base auth directory
-  mkdir -p "$AUTH_DIR"
+  # Create base auth directory (sudo fallback for root-owned workspace mounts)
+  if ! mkdir -p "$AUTH_DIR" 2>/dev/null; then
+    sudo mkdir -p "$AUTH_DIR" 2>/dev/null && \
+      sudo chown -R "$(id -u):$(id -g)" "$(get_workspace_root)/temp" 2>/dev/null || true
+  fi
 
   # Validate and setup each service
   for service in "${services[@]}"; do
@@ -98,9 +101,12 @@ setup_github_auth() {
     return 1
   fi
 
-  # Create directory with proper permissions
-  mkdir -p "$GH_CONFIG_DIR"
-  chmod 700 "$GH_CONFIG_DIR"
+  # Create directory with proper permissions (sudo fallback for root-owned workspace mounts)
+  if ! mkdir -p "$GH_CONFIG_DIR" 2>/dev/null; then
+    sudo mkdir -p "$GH_CONFIG_DIR" 2>/dev/null && \
+      sudo chown -R "$(id -u):$(id -g)" "$GH_CONFIG_DIR" 2>/dev/null || true
+  fi
+  chmod 700 "$GH_CONFIG_DIR" 2>/dev/null || sudo chmod 700 "$GH_CONFIG_DIR" 2>/dev/null || true
 
   # Shared auth volume: import credentials from shared volume
   if [ -d "$SHARED_GH_DIR" ] && [ -f "$SHARED_GH_DIR/hosts.yml" ] && [ ! -f "$HOSTS_FILE" ]; then
