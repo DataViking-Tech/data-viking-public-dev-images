@@ -135,6 +135,79 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+# --- Permissions tests ---
+echo ""
+echo "========================================="
+echo "Testing Permissions"
+echo "========================================="
+echo ""
+
+# Test /workspaces exists and is owned by vscode
+echo -n "Testing /workspaces ownership... "
+if [ -d /workspaces ]; then
+    WS_OWNER=$(stat -c '%U:%G' /workspaces)
+    if [ "$WS_OWNER" = "vscode:vscode" ]; then
+        echo "✓ PASS"
+    else
+        echo "✗ FAIL (owned by $WS_OWNER, expected vscode:vscode)"
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    echo "✗ FAIL (/workspaces does not exist)"
+    FAILURES=$((FAILURES + 1))
+fi
+
+# Test vscode can create directories in /workspaces
+echo -n "Testing vscode write access to /workspaces... "
+TEST_DIR="/workspaces/.permissions-test-$$"
+if [ "$(whoami)" = "vscode" ]; then
+    if mkdir -p "$TEST_DIR" 2>/dev/null && [ -d "$TEST_DIR" ]; then
+        rm -rf "$TEST_DIR"
+        echo "✓ PASS"
+    else
+        echo "✗ FAIL (vscode cannot create directories in /workspaces)"
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    # Running as root — verify by switching to vscode
+    if su -c "mkdir -p $TEST_DIR" vscode 2>/dev/null && [ -d "$TEST_DIR" ]; then
+        rm -rf "$TEST_DIR"
+        echo "✓ PASS"
+    else
+        echo "✗ FAIL (vscode cannot create directories in /workspaces)"
+        FAILURES=$((FAILURES + 1))
+    fi
+fi
+
+# Test /home/vscode/.claude ownership
+echo -n "Testing /home/vscode/.claude ownership... "
+if [ -d /home/vscode/.claude ]; then
+    CLAUDE_OWNER=$(stat -c '%U:%G' /home/vscode/.claude)
+    if [ "$CLAUDE_OWNER" = "vscode:vscode" ]; then
+        echo "✓ PASS"
+    else
+        echo "✗ FAIL (owned by $CLAUDE_OWNER, expected vscode:vscode)"
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    echo "✗ FAIL (/home/vscode/.claude does not exist)"
+    FAILURES=$((FAILURES + 1))
+fi
+
+# Test /home/vscode/.claude permissions (should be 700)
+echo -n "Testing /home/vscode/.claude permissions... "
+if [ -d /home/vscode/.claude ]; then
+    CLAUDE_PERMS=$(stat -c '%a' /home/vscode/.claude)
+    if [ "$CLAUDE_PERMS" = "700" ]; then
+        echo "✓ PASS"
+    else
+        echo "✗ FAIL (permissions $CLAUDE_PERMS, expected 700)"
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    echo "- SKIP (directory missing)"
+fi
+
 # Summary
 echo ""
 echo "========================================="
