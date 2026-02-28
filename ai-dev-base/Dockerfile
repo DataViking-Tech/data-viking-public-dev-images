@@ -164,6 +164,10 @@ COPY tests/test-tools.sh /usr/local/bin/test-tools.sh
 # Add ai-coding-utils to PYTHONPATH (must be set before test-tools.sh runs)
 ENV PYTHONPATH="/opt/ai-coding-utils"
 
+# Ensure vscode owns /workspaces so it can create dirs freely (e.g. temp/auth).
+# Must precede test-tools.sh which validates this ownership.
+RUN mkdir -p /workspaces && chown vscode:vscode /workspaces
+
 # Install Python deps, set permissions, configure shell, validate tools —
 # single layer to minimize overhead.
 RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 \
@@ -214,9 +218,6 @@ LABEL devcontainer.metadata='[{ \
   "postCreateCommand": "cp /usr/local/share/image-docs/UTILITIES.md .devcontainer/UTILITIES.md 2>/dev/null || true; [ ! -f .gitattributes ] && cp /usr/local/share/image-docs/.gitattributes .gitattributes 2>/dev/null || true; [ ! -f CLAUDE.md ] && cp /usr/local/share/image-docs/CLAUDE.md CLAUDE.md 2>/dev/null || true; [ ! -f .devcontainer/crew.json ] && cp /usr/local/share/image-docs/crew.json .devcontainer/crew.json 2>/dev/null || true; /opt/ai-coding-utils/beads/setup/ensure_beads.sh; /opt/dev-infra/setup/ensure_gastown.sh; /opt/dev-infra/setup/ensure_crew.sh; /opt/dev-infra/setup/install-agents.sh", \
   "postStartCommand": "sudo chown -R vscode:vscode /workspaces && dev-services start" \
 }]'
-
-# Ensure vscode owns /workspaces so it can create dirs freely (e.g. temp/auth)
-RUN mkdir -p /workspaces && chown vscode:vscode /workspaces
 
 WORKDIR /workspaces
 CMD ["/bin/bash"]
