@@ -85,7 +85,12 @@ echo ""
 echo "📦 Python Packages:"
 test_command "pillow" "python3 -c 'import PIL; print(PIL.__version__)'" ""
 test_command "numpy" "python3 -c 'import numpy; print(numpy.__version__)'" ""
-test_command "bpy" "python3 -c 'import bpy; print(bpy.app.version_string)'" ""
+# bpy only has x86_64 wheels
+if [ "$(uname -m)" = "x86_64" ]; then
+    test_command "bpy" "python3 -c 'import bpy; print(bpy.app.version_string)'" ""
+else
+    echo -e "Testing bpy... ${YELLOW}SKIP${NC} (no arm64 wheel)"
+fi
 
 echo ""
 echo "🌉 Render Bridges:"

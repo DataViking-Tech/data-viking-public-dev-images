@@ -44,8 +44,13 @@ RUN GODOT_ARCH=$(uname -m | sed 's/aarch64/arm64/') && \
     && godot --version
 
 # Install game-specific Python packages via uv (target Python 3.11 from base image)
+# bpy (Blender Python) only publishes x86_64 wheels — install conditionally
 COPY .devcontainer/requirements.txt /tmp/requirements.txt
-RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 -r /tmp/requirements.txt && rm /tmp/requirements.txt
+RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 -r /tmp/requirements.txt && \
+    if [ "$(uname -m)" = "x86_64" ]; then \
+        uv pip install --system --break-system-packages --python /usr/local/bin/python3 bpy==5.0.1; \
+    fi && \
+    rm /tmp/requirements.txt
 
 # Install render-bridges (GPU rendering bridge for Linux→Windows host)
 COPY lib/render-bridges/render_bridge /opt/render-bridges/render_bridge

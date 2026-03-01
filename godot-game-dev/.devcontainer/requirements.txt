@@ -3,5 +3,5 @@ pillow==12.1.0
 numpy==1.26.4
 pyyaml==6.0.3
 watchdog==6.0.0
-bpy==5.0.1
 imageio==2.37.2
+# bpy (Blender Python) — x86_64 only, installed conditionally in Dockerfile
