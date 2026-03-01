@@ -116,6 +116,13 @@ test_command "Shell is bash" "echo \$SHELL" "bash"
 test_command "PYTHONPATH includes render-bridges" "echo \$PYTHONPATH" "/opt/render-bridges"
 
 echo ""
+echo "🔒 Permissions:"
+test_command "/workspaces owned by vscode" "stat -c '%U:%G' /workspaces" "vscode:vscode"
+test_command "vscode can write to /workspaces" "test -w /workspaces && echo ok" "ok"
+test_command "/home/vscode/.claude owned by vscode" "stat -c '%U:%G' /home/vscode/.claude" "vscode:vscode"
+test_command "/home/vscode/.claude mode 700" "stat -c '%a' /home/vscode/.claude" "700"
+
+echo ""
 echo "📊 Results:"
 echo -e "${GREEN}Passed: $TESTS_PASSED${NC}"
 if [ $TESTS_FAILED -gt 0 ]; then
