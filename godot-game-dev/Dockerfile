@@ -4,7 +4,7 @@
 FROM ghcr.io/dataviking-tech/ai-dev-base:edge
 
 # Build arguments for component versions
-ARG GODOT_VERSION=4.5.1
+ARG GODOT_VERSION=4.6.1
 
 # Metadata
 LABEL org.opencontainers.image.source=https://github.com/DataViking-Tech/data-viking-public-dev-images
