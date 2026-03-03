@@ -7,7 +7,7 @@
 # See: https://github.com/steveyegge/beads/issues/XXX
 ###############################################################################
 FROM golang:1.25-bookworm AS beads-builder
-ARG BEADS_VERSION=0.52.0
+ARG BEADS_VERSION=0.58.0
 RUN apt-get update && apt-get install -y --no-install-recommends git gcc g++ libicu-dev && \
     rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch v${BEADS_VERSION} https://github.com/steveyegge/beads.git /src/beads
