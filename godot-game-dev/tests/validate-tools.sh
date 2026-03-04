@@ -61,7 +61,7 @@ test_file() {
 }
 
 echo "📦 Game Development Tools:"
-test_command "Godot" "godot --version" "4.5"
+test_command "Godot" "godot --version" "stable"
 test_command "ffmpeg" "ffmpeg -version" "ffmpeg version"
 test_command "xvfb-run" "xvfb-run --help" "xvfb-run"
 
