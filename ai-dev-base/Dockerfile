@@ -32,7 +32,7 @@ FROM debian:bookworm-slim
 # Build arguments for external binary versions
 ARG GASTOWN_VERSION=0.10.0
 ARG DOLT_VERSION=1.83.1
-ARG CODEX_VERSION=0.105.0
+ARG CODEX_VERSION=0.107.0
 ARG WRANGLER_VERSION=4.65.0
 
 # Create vscode user, set up locale, and install all system packages in a
