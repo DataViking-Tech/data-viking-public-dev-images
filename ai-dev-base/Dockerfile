@@ -6,7 +6,7 @@
 # Building from source ensures CGO is enabled on all architectures.
 # See: https://github.com/steveyegge/beads/issues/XXX
 ###############################################################################
-FROM golang:1.25-bookworm AS beads-builder
+FROM golang:1.26-bookworm AS beads-builder
 ARG BEADS_VERSION=0.58.0
 RUN apt-get update && apt-get install -y --no-install-recommends git gcc g++ libicu-dev && \
     rm -rf /var/lib/apt/lists/*
