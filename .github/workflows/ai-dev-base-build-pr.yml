@@ -55,7 +55,7 @@ jobs:
         run: docker save ghcr.io/dataviking-tech/ai-dev-base:edge -o /tmp/ai-dev-base.tar
 
       - name: Upload ai-dev-base image artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ai-dev-base-image
           path: /tmp/ai-dev-base.tar
@@ -72,7 +72,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download ai-dev-base image
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ai-dev-base-image
           path: /tmp
@@ -104,7 +104,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download ai-dev-base image
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ai-dev-base-image
           path: /tmp

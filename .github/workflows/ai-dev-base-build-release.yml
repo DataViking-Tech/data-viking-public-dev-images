@@ -109,7 +109,7 @@ jobs:
           echo "${{ steps.build.outputs.digest }}" > /tmp/digests/${{ matrix.arch }}
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.arch }}
           path: /tmp/digests/${{ matrix.arch }}
@@ -128,7 +128,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: digest-*
           path: /tmp/digests
