@@ -31,7 +31,7 @@ FROM debian:bookworm-slim
 
 # Build arguments for external binary versions
 ARG GASTOWN_VERSION=0.10.0
-ARG DOLT_VERSION=1.83.1
+ARG DOLT_VERSION=1.83.4
 ARG CODEX_VERSION=0.107.0
 ARG WRANGLER_VERSION=4.70.0
 
