@@ -86,7 +86,7 @@ jobs:
 
       - name: Build arm64 image (validation only)
         if: steps.base-changes.outputs.base != 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: godot-game-dev
           push: false
