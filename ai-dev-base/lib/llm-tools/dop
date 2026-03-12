@@ -1,0 +1,111 @@
+#!/bin/bash
+# dop — Interact with Doppler secrets manager
+#
+# Usage:
+#   dop projects                              List all projects
+#   dop configs PROJECT                       List configs for a project
+#   dop secrets PROJECT CONFIG                List secret names in a config
+#   dop get PROJECT CONFIG SECRET             Get a single secret value (plain text)
+#   dop get-json PROJECT CONFIG SECRET        Get a secret value, parse as JSON
+#   dop set PROJECT CONFIG KEY=VALUE...       Set one or more secrets
+#   dop delete PROJECT CONFIG SECRET...       Delete one or more secrets
+#   dop download PROJECT CONFIG               Download all secrets as JSON object
+#   dop activity [--project PROJECT]          View activity logs
+#   dop me                                    Show authenticated identity
+#
+# Output: JSON
+# Requires: doppler CLI authenticated (doppler login)
+#
+# Examples:
+#   dop projects
+#   dop secrets gastown dev
+#   dop get gastown dev DATABASE_URL
+#   dop set gastown dev API_KEY=sk-123 OTHER_KEY=val
+#   dop download ironclaw prd
+
+set -euo pipefail
+
+usage() {
+    sed -n '2,/^[^#]/{ /^#/s/^# \?//p }' "$0"
+    exit "${1:-0}"
+}
+
+[ $# -lt 1 ] && usage 0
+
+# Verify doppler is available
+if ! command -v doppler &>/dev/null; then
+    echo '{"error": "doppler CLI not found. Install from https://docs.doppler.com/docs/install-cli"}' >&2
+    exit 1
+fi
+
+ACTION="$1"
+shift
+
+case "$ACTION" in
+    projects)
+        doppler projects --json 2>/dev/null | jq '[.[] | {id, name, description, created_at}]'
+        ;;
+
+    configs)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: dop configs PROJECT"}' >&2; exit 1; }
+        doppler configs --project "$1" --json 2>/dev/null | jq '[.[] | {name, environment, root, locked}]'
+        ;;
+
+    secrets)
+        [ $# -lt 2 ] && { echo '{"error": "Usage: dop secrets PROJECT CONFIG"}' >&2; exit 1; }
+        doppler secrets --project "$1" --config "$2" --only-names --json 2>/dev/null | jq '.'
+        ;;
+
+    get)
+        [ $# -lt 3 ] && { echo '{"error": "Usage: dop get PROJECT CONFIG SECRET"}' >&2; exit 1; }
+        VALUE=$(doppler secrets get "$3" --project "$1" --config "$2" --plain 2>/dev/null)
+        jq -n --arg k "$3" --arg v "$VALUE" '{($k): $v}'
+        ;;
+
+    get-json)
+        [ $# -lt 3 ] && { echo '{"error": "Usage: dop get-json PROJECT CONFIG SECRET"}' >&2; exit 1; }
+        VALUE=$(doppler secrets get "$3" --project "$1" --config "$2" --plain 2>/dev/null)
+        if echo "$VALUE" | jq . >/dev/null 2>&1; then
+            echo "$VALUE" | jq .
+        else
+            echo '{"error": "Value is not valid JSON", "raw_length": '${#VALUE}'}' >&2
+            exit 1
+        fi
+        ;;
+
+    set)
+        [ $# -lt 3 ] && { echo '{"error": "Usage: dop set PROJECT CONFIG KEY=VALUE..."}' >&2; exit 1; }
+        PROJECT="$1"; CONFIG="$2"; shift 2
+        doppler secrets set "$@" --project "$PROJECT" --config "$CONFIG" --json 2>/dev/null | jq '.'
+        ;;
+
+    delete)
+        [ $# -lt 3 ] && { echo '{"error": "Usage: dop delete PROJECT CONFIG SECRET..."}' >&2; exit 1; }
+        PROJECT="$1"; CONFIG="$2"; shift 2
+        doppler secrets delete "$@" --project "$PROJECT" --config "$CONFIG" --yes --json 2>/dev/null | jq '.'
+        ;;
+
+    download)
+        [ $# -lt 2 ] && { echo '{"error": "Usage: dop download PROJECT CONFIG"}' >&2; exit 1; }
+        doppler secrets download --project "$1" --config "$2" --no-file --format json 2>/dev/null | jq '.'
+        ;;
+
+    activity)
+        PROJECT_FLAG=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --project) PROJECT_FLAG="--project $2"; shift 2 ;;
+                *) echo "{\"error\": \"Unknown arg: $1\"}" >&2; exit 1 ;;
+            esac
+        done
+        # shellcheck disable=SC2086
+        doppler activity $PROJECT_FLAG --json 2>/dev/null | jq '[.[] | {text, created_at, user: .user.name}]'
+        ;;
+
+    me)
+        doppler me --json 2>/dev/null | jq '.'
+        ;;
+
+    -h|--help) usage 0 ;;
+    *) echo "{\"error\": \"Unknown action: ${ACTION}. Use: projects, configs, secrets, get, get-json, set, delete, download, activity, me\"}" >&2; exit 1 ;;
+esac

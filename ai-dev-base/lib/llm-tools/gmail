@@ -1,0 +1,274 @@
+#!/bin/bash
+# gmail — Interact with Gmail API via Google service account
+#
+# Usage:
+#   gmail labels                              List all labels
+#   gmail inbox [--max N]                     List inbox messages (default 10)
+#   gmail search "QUERY" [--max N]            Search messages (Gmail search syntax)
+#   gmail read MESSAGE_ID                     Read a message (returns subject, from, to, date, body)
+#   gmail send TO SUBJECT BODY                Send an email
+#   gmail reply MESSAGE_ID BODY               Reply to a message
+#   gmail threads [--max N]                   List recent threads
+#   gmail thread THREAD_ID                    Get all messages in a thread
+#
+# Output: JSON
+# Requires: GOOGLE_SERVICE_ACCOUNT_JSON env var (or via Doppler),
+#           GMAIL_USER env var (default: claude@dataviking.tech),
+#           Gmail API enabled in the GCP project
+#
+# Examples:
+#   gmail inbox
+#   gmail search "from:wesley subject:deploy"
+#   gmail send wesley@dataviking.tech "Status Update" "All systems green."
+#   gmail read 18e2a3b4c5d6e7f8
+#   gmail reply 18e2a3b4c5d6e7f8 "Acknowledged, will handle."
+
+set -euo pipefail
+
+usage() {
+    sed -n '2,/^[^#]/{ /^#/s/^# \?//p }' "$0"
+    exit "${1:-0}"
+}
+
+[ $# -lt 1 ] && usage 0
+
+GMAIL_USER="${GMAIL_USER:-claude@dataviking.tech}"
+
+# Get SA JSON — from env var, or Doppler, or fail
+_get_sa_json() {
+    if [ -n "${GOOGLE_SERVICE_ACCOUNT_JSON:-}" ]; then
+        echo "$GOOGLE_SERVICE_ACCOUNT_JSON"
+    elif command -v doppler &>/dev/null; then
+        doppler secrets get GOOGLE_SERVICE_ACCOUNT_JSON --project gastown --config dev --plain 2>/dev/null
+    else
+        echo '{"error": "GOOGLE_SERVICE_ACCOUNT_JSON not set and doppler not available"}' >&2
+        exit 1
+    fi
+}
+
+# Get OAuth2 access token via JWT exchange
+_get_token() {
+    local sa_json scope="$1"
+    sa_json=$(_get_sa_json)
+
+    python3 -c "
+import json, time, base64, subprocess, tempfile, os, sys
+from urllib.request import urlopen, Request
+from urllib.parse import urlencode
+
+sa = json.loads(sys.stdin.read())
+header = base64.urlsafe_b64encode(json.dumps({'alg':'RS256','typ':'JWT'}).encode()).rstrip(b'=')
+now = int(time.time())
+claims = {
+    'iss': sa['client_email'],
+    'sub': '$GMAIL_USER',
+    'scope': '$scope',
+    'aud': 'https://oauth2.googleapis.com/token',
+    'iat': now,
+    'exp': now + 3600
+}
+payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b'=')
+signing_input = header + b'.' + payload
+
+kf = tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False)
+kf.write(sa['private_key'])
+kf.close()
+result = subprocess.run(['openssl', 'dgst', '-sha256', '-sign', kf.name], input=signing_input, capture_output=True)
+os.unlink(kf.name)
+
+signature = base64.urlsafe_b64encode(result.stdout).rstrip(b'=')
+jwt_token = (signing_input + b'.' + signature).decode()
+
+data = urlencode({'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer', 'assertion': jwt_token}).encode()
+req = Request('https://oauth2.googleapis.com/token', data=data, method='POST')
+try:
+    resp = urlopen(req)
+    print(json.loads(resp.read())['access_token'])
+except Exception as e:
+    if hasattr(e, 'read'):
+        err = e.read().decode()
+        print(json.dumps({'error': 'Token exchange failed', 'detail': err}), file=sys.stderr)
+    else:
+        print(json.dumps({'error': str(e)}), file=sys.stderr)
+    sys.exit(1)
+" <<< "$sa_json"
+}
+
+# Gmail API call
+_gmail_api() {
+    local method="$1" path="$2" body="${3:-}"
+    local token
+    token=$(_get_token "https://www.googleapis.com/auth/gmail.modify")
+
+    local url="https://gmail.googleapis.com/gmail/v1/users/${GMAIL_USER}${path}"
+    local curl_args=(-s -S -X "$method" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json")
+    [ -n "$body" ] && curl_args+=(-d "$body")
+
+    local response
+    response=$(curl "${curl_args[@]}" "$url" 2>&1)
+
+    if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+        echo "$response" | jq '{error: .error.message, code: .error.code}' >&2
+        exit 1
+    fi
+    echo "$response"
+}
+
+# Decode base64url body
+_decode_body() {
+    python3 -c "
+import sys, json, base64
+msg = json.loads(sys.stdin.read())
+payload = msg.get('payload', {})
+
+# Get headers
+headers = {h['name'].lower(): h['value'] for h in payload.get('headers', [])}
+
+# Find body — check parts first, then payload body
+body = ''
+def find_text(part):
+    if part.get('mimeType','').startswith('text/plain') and part.get('body',{}).get('data'):
+        return base64.urlsafe_b64decode(part['body']['data'] + '==').decode('utf-8', errors='replace')
+    for p in part.get('parts', []):
+        r = find_text(p)
+        if r: return r
+    return ''
+
+body = find_text(payload)
+if not body and payload.get('body',{}).get('data'):
+    body = base64.urlsafe_b64decode(payload['body']['data'] + '==').decode('utf-8', errors='replace')
+
+result = {
+    'id': msg.get('id'),
+    'threadId': msg.get('threadId'),
+    'subject': headers.get('subject', ''),
+    'from': headers.get('from', ''),
+    'to': headers.get('to', ''),
+    'date': headers.get('date', ''),
+    'snippet': msg.get('snippet', ''),
+    'body': body[:5000],
+    'labelIds': msg.get('labelIds', [])
+}
+print(json.dumps(result, indent=2))
+"
+}
+
+ACTION="$1"
+shift
+
+case "$ACTION" in
+    labels)
+        _gmail_api GET "/labels" | jq '[.labels[] | {id, name, type}]'
+        ;;
+
+    inbox)
+        MAX=10
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --max) MAX="$2"; shift 2 ;;
+                *) echo "{\"error\": \"Unknown arg: $1\"}" >&2; exit 1 ;;
+            esac
+        done
+        _gmail_api GET "/messages?maxResults=${MAX}&labelIds=INBOX" | \
+            jq '[.messages // [] | .[] | {id, threadId}]'
+        ;;
+
+    search)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: gmail search QUERY [--max N]"}' >&2; exit 1; }
+        QUERY="$1"; shift
+        MAX=10
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --max) MAX="$2"; shift 2 ;;
+                *) echo "{\"error\": \"Unknown arg: $1\"}" >&2; exit 1 ;;
+            esac
+        done
+        ENCODED_Q=$(python3 -c "from urllib.parse import quote; print(quote('$QUERY'))")
+        _gmail_api GET "/messages?maxResults=${MAX}&q=${ENCODED_Q}" | \
+            jq '[.messages // [] | .[] | {id, threadId}]'
+        ;;
+
+    read)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: gmail read MESSAGE_ID"}' >&2; exit 1; }
+        _gmail_api GET "/messages/$1?format=full" | _decode_body
+        ;;
+
+    send)
+        [ $# -lt 3 ] && { echo '{"error": "Usage: gmail send TO SUBJECT BODY"}' >&2; exit 1; }
+        TO="$1"; SUBJECT="$2"; BODY="$3"
+        # Build RFC 2822 message, base64url encode
+        RAW=$(python3 -c "
+import base64
+msg = f'From: ${GMAIL_USER}\r\nTo: ${TO}\r\nSubject: ${SUBJECT}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${BODY}'
+print(base64.urlsafe_b64encode(msg.encode()).decode())
+")
+        _gmail_api POST "/messages/send" "{\"raw\": \"${RAW}\"}" | jq '{id, threadId, labelIds}'
+        ;;
+
+    reply)
+        [ $# -lt 2 ] && { echo '{"error": "Usage: gmail reply MESSAGE_ID BODY"}' >&2; exit 1; }
+        MSG_ID="$1"; BODY="$2"
+        # Get original message for threading
+        ORIG=$(_gmail_api GET "/messages/${MSG_ID}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Message-ID")
+        THREAD_ID=$(echo "$ORIG" | jq -r '.threadId')
+        HEADERS=$(echo "$ORIG" | jq -r '.payload.headers')
+        SUBJECT=$(echo "$HEADERS" | jq -r '.[] | select(.name=="Subject") | .value')
+        FROM=$(echo "$HEADERS" | jq -r '.[] | select(.name=="From") | .value')
+        MESSAGE_ID=$(echo "$HEADERS" | jq -r '.[] | select(.name=="Message-ID") | .value // empty')
+
+        [[ "$SUBJECT" != Re:* ]] && SUBJECT="Re: $SUBJECT"
+
+        RAW=$(python3 -c "
+import base64
+msg = f'From: ${GMAIL_USER}\r\nTo: ${FROM}\r\nSubject: ${SUBJECT}\r\nIn-Reply-To: ${MESSAGE_ID}\r\nReferences: ${MESSAGE_ID}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${BODY}'
+print(base64.urlsafe_b64encode(msg.encode()).decode())
+")
+        _gmail_api POST "/messages/send" "{\"raw\": \"${RAW}\", \"threadId\": \"${THREAD_ID}\"}" | jq '{id, threadId, labelIds}'
+        ;;
+
+    threads)
+        MAX=10
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --max) MAX="$2"; shift 2 ;;
+                *) echo "{\"error\": \"Unknown arg: $1\"}" >&2; exit 1 ;;
+            esac
+        done
+        _gmail_api GET "/threads?maxResults=${MAX}" | \
+            jq '[.threads // [] | .[] | {id, snippet, historyId}]'
+        ;;
+
+    thread)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: gmail thread THREAD_ID"}' >&2; exit 1; }
+        _gmail_api GET "/threads/$1?format=full" | python3 -c "
+import sys, json, base64
+data = json.loads(sys.stdin.read())
+messages = []
+for msg in data.get('messages', []):
+    payload = msg.get('payload', {})
+    headers = {h['name'].lower(): h['value'] for h in payload.get('headers', [])}
+    def find_text(part):
+        if part.get('mimeType','').startswith('text/plain') and part.get('body',{}).get('data'):
+            return base64.urlsafe_b64decode(part['body']['data'] + '==').decode('utf-8', errors='replace')
+        for p in part.get('parts', []):
+            r = find_text(p)
+            if r: return r
+        return ''
+    body = find_text(payload)
+    if not body and payload.get('body',{}).get('data'):
+        body = base64.urlsafe_b64decode(payload['body']['data'] + '==').decode('utf-8', errors='replace')
+    messages.append({
+        'id': msg['id'],
+        'from': headers.get('from',''),
+        'date': headers.get('date',''),
+        'subject': headers.get('subject',''),
+        'body': body[:3000],
+        'labelIds': msg.get('labelIds',[])
+    })
+print(json.dumps({'id': data['id'], 'messages': messages}, indent=2))
+"
+        ;;
+
+    -h|--help) usage 0 ;;
+    *) echo "{\"error\": \"Unknown action: ${ACTION}. Use: labels, inbox, search, read, send, reply, threads, thread\"}" >&2; exit 1 ;;
+esac
