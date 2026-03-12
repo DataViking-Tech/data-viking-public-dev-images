@@ -1,0 +1,203 @@
+#!/bin/bash
+# cf — Interact with Cloudflare API (Workers, DNS, Routes, R2 buckets, Tunnels)
+#
+# Usage:
+#   cf workers                              List Workers scripts
+#   cf worker-detail SCRIPT_NAME            Get Worker details (routes, bindings, size)
+#   cf worker-logs SCRIPT_NAME              Tail Worker logs (last 10s of events)
+#   cf dns [--type TYPE]                    List DNS records (optionally filter by type)
+#   cf dns-add TYPE NAME CONTENT [--proxied] Add a DNS record
+#   cf dns-rm RECORD_ID                     Delete a DNS record
+#   cf routes                               List Worker routes
+#   cf route-add PATTERN SCRIPT             Add a Worker route
+#   cf route-rm ROUTE_ID                    Delete a Worker route
+#   cf r2-buckets                           List R2 buckets
+#   cf tunnels                              List Cloudflare tunnels
+#   cf tunnel-detail TUNNEL_ID              Get tunnel connections/status
+#   cf zones                                List zones
+#   cf api METHOD /path ['{"body":"json"}'] Raw API call
+#
+# Output: JSON
+# Requires: CLOUDFLARE_API_TOKEN, CLOUDFLARE_EMAIL, CLOUDFLARE_ACCOUNT_ID env vars
+#   Auto-detects CLOUDFLARE_ZONE_ID from first zone if not set
+#
+# Examples:
+#   cf workers
+#   cf dns --type CNAME
+#   cf dns-add CNAME staging.dataviking.tech my-staging.pages.dev --proxied
+#   cf worker-logs mtg-pricing-api
+#   cf api GET /accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts
+
+set -euo pipefail
+
+usage() {
+    sed -n '2,/^[^#]/{ /^#/s/^# \?//p }' "$0"
+    exit "${1:-0}"
+}
+
+[ $# -lt 1 ] && usage 0
+
+for var in CLOUDFLARE_API_TOKEN CLOUDFLARE_EMAIL CLOUDFLARE_ACCOUNT_ID; do
+    if [ -z "${!var:-}" ]; then
+        echo "{\"error\": \"${var} not set. Run doppler login or check .env\"}" >&2
+        exit 1
+    fi
+done
+
+ACCT="$CLOUDFLARE_ACCOUNT_ID"
+BASE="https://api.cloudflare.com/client/v4"
+
+_cf_api() {
+    local method="$1" path="$2" body="${3:-}"
+    local curl_args=(
+        -s -S
+        -X "$method"
+        -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+        -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}"
+        -H "Content-Type: application/json"
+    )
+    [ -n "$body" ] && curl_args+=(-d "$body")
+
+    local url
+    if [[ "$path" == http* ]]; then
+        url="$path"
+    else
+        url="${BASE}${path}"
+    fi
+
+    local response
+    response=$(curl "${curl_args[@]}" "$url" 2>&1)
+
+    if echo "$response" | jq -e '.success == false' >/dev/null 2>&1; then
+        echo "$response" | jq '{success: .success, errors: .errors}' >&2
+        exit 1
+    fi
+    echo "$response"
+}
+
+# Auto-detect zone ID
+_zone_id() {
+    if [ -n "${CLOUDFLARE_ZONE_ID:-}" ]; then
+        echo "$CLOUDFLARE_ZONE_ID"
+    else
+        _cf_api GET "/zones?per_page=1" | jq -r '.result[0].id'
+    fi
+}
+
+ACTION="$1"
+shift
+
+case "$ACTION" in
+    workers)
+        _cf_api GET "/accounts/${ACCT}/workers/scripts" | \
+            jq '[.result[] | {id, modified_on, compatibility_date, handlers}]'
+        ;;
+
+    worker-detail)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: cf worker-detail SCRIPT_NAME"}' >&2; exit 1; }
+        SCRIPT="$1"
+        ZONE=$(_zone_id)
+        # Get script metadata + routes pointing to it
+        SETTINGS=$(_cf_api GET "/accounts/${ACCT}/workers/scripts/${SCRIPT}/settings" | jq '.result')
+        ROUTES=$(_cf_api GET "/zones/${ZONE}/workers/routes" | \
+            jq --arg s "$SCRIPT" '[.result[] | select(.script == $s)]')
+        echo "$SETTINGS" | jq --argjson routes "$ROUTES" '. + {routes: $routes}'
+        ;;
+
+    worker-logs)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: cf worker-logs SCRIPT_NAME"}' >&2; exit 1; }
+        # Create a tail and read events
+        SCRIPT="$1"
+        TAIL=$(_cf_api POST "/accounts/${ACCT}/workers/scripts/${SCRIPT}/tails" '{}')
+        TAIL_URL=$(echo "$TAIL" | jq -r '.result.url // empty')
+        if [ -z "$TAIL_URL" ]; then
+            echo "$TAIL" | jq . >&2
+            exit 1
+        fi
+        TAIL_ID=$(echo "$TAIL" | jq -r '.result.id')
+        echo "{\"status\": \"tailing\", \"url\": \"$TAIL_URL\", \"tail_id\": \"$TAIL_ID\", \"hint\": \"Connect via WebSocket to stream logs. Delete tail when done: cf api DELETE /accounts/${ACCT}/workers/scripts/${SCRIPT}/tails/${TAIL_ID}\"}"
+        ;;
+
+    dns)
+        ZONE=$(_zone_id)
+        TYPE_FILTER=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --type) TYPE_FILTER="$2"; shift 2 ;;
+                *) echo "{\"error\": \"Unknown arg: $1\"}" >&2; exit 1 ;;
+            esac
+        done
+        QUERY=""
+        [ -n "$TYPE_FILTER" ] && QUERY="?type=${TYPE_FILTER}"
+        _cf_api GET "/zones/${ZONE}/dns_records${QUERY}" | \
+            jq '[.result[] | {id, type, name, content: (.content[:80]), proxied, ttl}]'
+        ;;
+
+    dns-add)
+        [ $# -lt 3 ] && { echo '{"error": "Usage: cf dns-add TYPE NAME CONTENT [--proxied]"}' >&2; exit 1; }
+        ZONE=$(_zone_id)
+        TYPE="$1"; NAME="$2"; CONTENT="$3"; shift 3
+        PROXIED="false"
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --proxied) PROXIED="true"; shift ;;
+                *) echo "{\"error\": \"Unknown arg: $1\"}" >&2; exit 1 ;;
+            esac
+        done
+        _cf_api POST "/zones/${ZONE}/dns_records" \
+            "{\"type\":\"${TYPE}\",\"name\":\"${NAME}\",\"content\":\"${CONTENT}\",\"proxied\":${PROXIED}}" | \
+            jq '.result | {id, type, name, content, proxied}'
+        ;;
+
+    dns-rm)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: cf dns-rm RECORD_ID"}' >&2; exit 1; }
+        ZONE=$(_zone_id)
+        _cf_api DELETE "/zones/${ZONE}/dns_records/$1" | jq '.result'
+        ;;
+
+    routes)
+        ZONE=$(_zone_id)
+        _cf_api GET "/zones/${ZONE}/workers/routes" | \
+            jq '[.result[] | {id, pattern, script}]'
+        ;;
+
+    route-add)
+        [ $# -lt 2 ] && { echo '{"error": "Usage: cf route-add PATTERN SCRIPT"}' >&2; exit 1; }
+        ZONE=$(_zone_id)
+        _cf_api POST "/zones/${ZONE}/workers/routes" \
+            "{\"pattern\":\"$1\",\"script\":\"$2\"}" | jq '.result'
+        ;;
+
+    route-rm)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: cf route-rm ROUTE_ID"}' >&2; exit 1; }
+        ZONE=$(_zone_id)
+        _cf_api DELETE "/zones/${ZONE}/workers/routes/$1" | jq '.result'
+        ;;
+
+    r2-buckets)
+        _cf_api GET "/accounts/${ACCT}/r2/buckets" | \
+            jq '[.result.buckets[] | {name, creation_date, location}]'
+        ;;
+
+    tunnels)
+        _cf_api GET "/accounts/${ACCT}/cfd_tunnel" | \
+            jq '[.result[] | {id, name, status, created_at}]'
+        ;;
+
+    tunnel-detail)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: cf tunnel-detail TUNNEL_ID"}' >&2; exit 1; }
+        _cf_api GET "/accounts/${ACCT}/cfd_tunnel/$1" | jq '.result'
+        ;;
+
+    zones)
+        _cf_api GET "/zones" | jq '[.result[] | {id, name, status, plan: .plan.name}]'
+        ;;
+
+    api)
+        [ $# -lt 2 ] && { echo '{"error": "Usage: cf api METHOD /path [BODY_JSON]"}' >&2; exit 1; }
+        _cf_api "$1" "$2" "${3:-}" | jq '.'
+        ;;
+
+    -h|--help) usage 0 ;;
+    *) echo "{\"error\": \"Unknown action: ${ACTION}. Use: workers, worker-detail, worker-logs, dns, dns-add, dns-rm, routes, route-add, route-rm, r2-buckets, tunnels, tunnel-detail, zones, api\"}" >&2; exit 1 ;;
+esac
