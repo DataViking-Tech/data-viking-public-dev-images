@@ -92,6 +92,19 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+# Test psql (needed by supa-query)
+test_command "PostgreSQL client (psql)" "psql --version" "psql"
+
+# Test CLI wrappers (existence and syntax only — no live API calls)
+test_command "CLI wrapper (dop)" "which dop && bash -n /opt/dev-infra/cli/dop.sh" ""
+test_command "CLI wrapper (supa-query)" "which supa-query && bash -n /opt/dev-infra/cli/supa-query.sh" ""
+test_command "CLI wrapper (dagster-cloud)" "which dagster-cloud && bash -n /opt/dev-infra/cli/dagster-cloud.sh" ""
+test_command "CLI wrapper (dbx)" "which dbx && bash -n /opt/dev-infra/cli/dbx.sh" ""
+test_command "CLI wrapper (cf)" "which cf && bash -n /opt/dev-infra/cli/cf.sh" ""
+test_command "CLI wrapper (cf-r2)" "which cf-r2 && bash -n /opt/dev-infra/cli/cf-r2.sh" ""
+test_command "CLI wrapper (kafka-rest)" "which kafka-rest && bash -n /opt/dev-infra/cli/kafka-rest.sh" ""
+test_command "CLI wrapper (gmail)" "which gmail && bash -n /opt/dev-infra/cli/gmail.sh" ""
+
 # Test dev-services command
 echo -n "Testing dev-services command... "
 if [ -x /usr/local/bin/dev-services ] && dev-services --help >/dev/null 2>&1; then

@@ -83,7 +83,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
       > /etc/apt/sources.list.d/doppler-cli.list && \
     # Single install for all external apt packages
     apt-get update && apt-get install -y --no-install-recommends \
-      gh docker-ce-cli docker-compose-plugin doppler && \
+      gh docker-ce-cli docker-compose-plugin doppler postgresql-client && \
     groupadd -f docker && usermod -aG docker vscode && \
     rm -rf /var/lib/apt/lists/*
 
@@ -160,6 +160,7 @@ COPY lib/dev-infra/secrets /opt/dev-infra/secrets
 COPY lib/llm-tools/ /opt/llm-tools/
 COPY lib/dev-infra/env_hydrate.sh /opt/dev-infra/env_hydrate.sh
 COPY lib/dev-infra/setup /opt/dev-infra/setup
+COPY lib/dev-infra/cli /opt/dev-infra/cli
 COPY lib/dev-infra/profile.sh /etc/profile.d/ai-dev-utils.sh
 COPY tests/test-tools.sh /usr/local/bin/test-tools.sh
 
@@ -177,10 +178,19 @@ RUN uv pip install --system --break-system-packages --python /usr/local/bin/pyth
     chmod +x /opt/llm-tools/* && \
     ln -sf /opt/llm-tools/* /usr/local/bin/ && \
     chmod +x /opt/dev-infra/*.sh /opt/dev-infra/setup/*.sh \
+    /opt/dev-infra/cli/*.sh \
     /opt/ai-coding-utils/beads/setup/ensure_beads.sh \
     /etc/profile.d/ai-dev-utils.sh \
     /usr/local/bin/test-tools.sh && \
     ln -sf /opt/dev-infra/setup/dev-services.sh /usr/local/bin/dev-services && \
+    ln -sf /opt/dev-infra/cli/dop.sh /usr/local/bin/dop && \
+    ln -sf /opt/dev-infra/cli/supa-query.sh /usr/local/bin/supa-query && \
+    ln -sf /opt/dev-infra/cli/dagster-cloud.sh /usr/local/bin/dagster-cloud && \
+    ln -sf /opt/dev-infra/cli/dbx.sh /usr/local/bin/dbx && \
+    ln -sf /opt/dev-infra/cli/cf.sh /usr/local/bin/cf && \
+    ln -sf /opt/dev-infra/cli/cf-r2.sh /usr/local/bin/cf-r2 && \
+    ln -sf /opt/dev-infra/cli/kafka-rest.sh /usr/local/bin/kafka-rest && \
+    ln -sf /opt/dev-infra/cli/gmail.sh /usr/local/bin/gmail && \
     echo '' >> /etc/bash.bashrc && \
     echo '# Source AI dev utilities for all interactive shells' >> /etc/bash.bashrc && \
     echo 'if [ -f /etc/profile.d/ai-dev-utils.sh ]; then' >> /etc/bash.bashrc && \
