@@ -21,7 +21,8 @@ usage() {
     exit "${1:-0}"
 }
 
-[ $# -lt 1 ] && usage 0
+# Show help if no args AND stdin is a terminal (not a pipe)
+[ $# -lt 1 ] && [ -t 0 ] && usage 0
 
 FORMAT="json"
 QUERY=""
