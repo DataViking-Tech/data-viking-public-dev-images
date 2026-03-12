@@ -132,6 +132,35 @@ Simple list format is also supported:
 
 **Requirements:** Gastown must be enabled (`GASTOWN_ENABLED` not set to `false`) and the project must be registered as a rig.
 
+## CLI Wrappers (`/opt/dev-infra/cli`)
+
+Lightweight bash wrappers that inject Doppler secrets and call service APIs. Each is symlinked to `/usr/local/bin/` for direct use. Credentials resolve in order: env var → Doppler fetch (via project/config from `service-registry.conf`).
+
+| Command | Subcommands | Underlying Service |
+|---------|-------------|--------------------|
+| `dop` | `me`, `projects`, `configs`, `secrets`, `get` | Doppler CLI |
+| `supa-query` | `"SQL string"` | PostgreSQL via `psql` |
+| `dagster-cloud` | `repos`, `runs`, `run-logs` | Dagster Cloud GraphQL API |
+| `dbx` | `warehouses`, `jobs`, `job-status` | Databricks REST API |
+| `cf` | `workers`, `worker-detail`, `routes`, `dns`, `zones` | Cloudflare API v4 |
+| `cf-r2` | `ls` | R2 S3-compatible API |
+| `kafka-rest` | `topics` | Kafka REST proxy |
+| `gmail` | `search` | Gmail (stub — not implemented) |
+
+**Configuration:** Set env vars in `devcontainer.json` or `postCreateCommand`:
+
+| Variable | Used by | Purpose |
+|----------|---------|---------|
+| `SUPA_PROJECT` / `SUPA_CONFIG` | `supa-query` | Doppler project for `DATABASE_URL` |
+| `DAGSTER_PROJECT` / `DAGSTER_CONFIG` | `dagster-cloud` | Doppler project for Dagster credentials |
+| `DBX_PROJECT` / `DBX_CONFIG` | `dbx` | Doppler project for Databricks credentials |
+| `CF_PROJECT` / `CF_CONFIG` | `cf`, `cf-r2` | Doppler project for Cloudflare credentials |
+| `KAFKA_PROJECT` / `KAFKA_CONFIG` | `kafka-rest` | Doppler project for Kafka credentials |
+
+Or set the underlying env vars directly (`DATABASE_URL`, `DAGSTER_CLOUD_API_TOKEN`, etc.) to skip Doppler.
+
+Run any wrapper with `--help` for detailed usage.
+
 ## Shell Aliases
 
 Defined in `lib/dev-infra/profile.sh` (installed to `/etc/profile.d/ai-dev-utils.sh`) and available in every shell:
