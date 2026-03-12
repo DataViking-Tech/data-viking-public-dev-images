@@ -62,9 +62,14 @@ if body_file and body_file != '':
 
 content_hash = hashlib.sha256(body).hexdigest()
 canonical_uri = f'/{bucket}{path}'
+
+# S3 Sig V4 requires query params sorted alphabetically
+import urllib.parse
+sorted_query = '&'.join(sorted(query.split('&'))) if query else ''
+
 canonical_headers = f'host:{host}\nx-amz-content-sha256:{content_hash}\nx-amz-date:{amz_date}\n'
 signed_headers = 'host;x-amz-content-sha256;x-amz-date'
-canonical_request = f'{method}\n{canonical_uri}\n{query}\n{canonical_headers}\n{signed_headers}\n{content_hash}'
+canonical_request = f'{method}\n{canonical_uri}\n{sorted_query}\n{canonical_headers}\n{signed_headers}\n{content_hash}'
 
 scope = f'{date_stamp}/{region}/{service}/aws4_request'
 string_to_sign = f'AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{hashlib.sha256(canonical_request.encode()).hexdigest()}'
@@ -75,7 +80,7 @@ signature = hmac.new(k, string_to_sign.encode(), hashlib.sha256).hexdigest()
 
 auth = f'AWS4-HMAC-SHA256 Credential={access_key}/{scope}, SignedHeaders={signed_headers}, Signature={signature}'
 url = f'{endpoint}/{bucket}{path}'
-if query: url += f'?{query}'
+if sorted_query: url += f'?{sorted_query}'
 
 req = urllib.request.Request(url, data=body if method == 'PUT' else None, method=method)
 req.add_header('Authorization', auth)
@@ -158,8 +163,63 @@ case "$ACTION" in
 
     head)
         [ $# -lt 1 ] && { echo '{"error": "Usage: cf-r2 head KEY"}' >&2; exit 1; }
-        # Use -I for headers only, parse to JSON
-        _s3_request HEAD "/$1" 2>&1 | head -20
+        KEY="$1"
+        # HEAD requests: use curl directly to capture headers as JSON
+        python3 -c "
+import sys, hashlib, hmac, datetime, urllib.request, urllib.error, ssl, json
+
+endpoint = '$ENDPOINT'
+bucket = '$BUCKET'
+access_key = '$R2_ACCESS_KEY_ID'
+secret_key = '$R2_SECRET_ACCESS_KEY'
+key = '$KEY'
+
+host = endpoint.replace('https://','').replace('http://','').rstrip('/')
+region, service = 'auto', 's3'
+now = datetime.datetime.utcnow()
+date_stamp = now.strftime('%Y%m%d')
+amz_date = now.strftime('%Y%m%dT%H%M%SZ')
+
+content_hash = hashlib.sha256(b'').hexdigest()
+canonical_uri = f'/{bucket}/{key}'
+canonical_headers = f'host:{host}\nx-amz-content-sha256:{content_hash}\nx-amz-date:{amz_date}\n'
+signed_headers = 'host;x-amz-content-sha256;x-amz-date'
+canonical_request = f'HEAD\n{canonical_uri}\n\n{canonical_headers}\n{signed_headers}\n{content_hash}'
+
+scope = f'{date_stamp}/{region}/{service}/aws4_request'
+string_to_sign = f'AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{hashlib.sha256(canonical_request.encode()).hexdigest()}'
+
+def sign(k, msg): return hmac.new(k, msg.encode(), hashlib.sha256).digest()
+k = sign(sign(sign(sign(f'AWS4{secret_key}'.encode(), date_stamp), region), service), 'aws4_request')
+signature = hmac.new(k, string_to_sign.encode(), hashlib.sha256).hexdigest()
+
+auth = f'AWS4-HMAC-SHA256 Credential={access_key}/{scope}, SignedHeaders={signed_headers}, Signature={signature}'
+url = f'{endpoint}/{bucket}/{key}'
+
+req = urllib.request.Request(url, method='HEAD')
+req.add_header('Authorization', auth)
+req.add_header('x-amz-content-sha256', content_hash)
+req.add_header('x-amz-date', amz_date)
+
+ctx = ssl.create_default_context()
+try:
+    with urllib.request.urlopen(req, context=ctx) as resp:
+        headers = dict(resp.headers)
+        meta = {
+            'key': key,
+            'size': headers.get('Content-Length'),
+            'content_type': headers.get('Content-Type'),
+            'last_modified': headers.get('Last-Modified'),
+            'etag': headers.get('ETag'),
+        }
+        print(json.dumps(meta, indent=2))
+except urllib.error.HTTPError as e:
+    if e.code == 404:
+        print(json.dumps({'error': 'Not found', 'key': key}), file=sys.stderr)
+    else:
+        print(json.dumps({'error': f'HTTP {e.code}', 'key': key}), file=sys.stderr)
+    sys.exit(1)
+"
         ;;
 
     rm)

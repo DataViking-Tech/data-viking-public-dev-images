@@ -103,7 +103,10 @@ case "$ACTION" in
 
     schema)
         [ $# -lt 1 ] && { echo '{"error": "Usage: kafka-rest schema TOPIC"}' >&2; exit 1; }
-        _curl "${BASE_URL}/topics/$1" | _jq_or_raw
+        RESP=$(_curl "${BASE_URL}/topics/$1")
+        echo "$RESP" | _jq_or_raw
+        # Exit 1 if response contains an error_code
+        echo "$RESP" | jq -e '.error_code' >/dev/null 2>&1 && exit 1
         ;;
 
     -h|--help) usage 0 ;;
