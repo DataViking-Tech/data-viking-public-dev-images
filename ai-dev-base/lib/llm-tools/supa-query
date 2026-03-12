@@ -21,6 +21,8 @@ usage() {
     exit "${1:-0}"
 }
 
+[ $# -lt 1 ] && usage 0
+
 FORMAT="json"
 QUERY=""
 FILE=""
@@ -35,6 +37,11 @@ while [ $# -gt 0 ]; do
         *) QUERY="$1"; shift ;;
     esac
 done
+
+# No query provided and stdin is a terminal — show help
+if [ -z "$QUERY" ] && [ -z "$FILE" ] && [ -t 0 ]; then
+    usage 0
+fi
 
 if [ -z "${DATABASE_URL:-}" ]; then
     echo '{"error": "DATABASE_URL not set. Run doppler login or check .env"}' >&2

@@ -26,7 +26,7 @@ usage() {
     exit "${1:-0}"
 }
 
-[ $# -lt 2 ] && usage 1
+[ $# -lt 2 ] && usage 0
 
 METHOD="${1^^}"
 ENDPOINT="$2"

@@ -2,7 +2,7 @@
 # cf-r2 — Cloudflare R2 object storage operations via S3-compatible API
 #
 # Usage:
-#   cf-r2 ls [PREFIX]                  List objects (optional prefix filter)
+#   cf-r2 ls [PREFIX] [--limit N]       List objects (optional prefix filter and max results)
 #   cf-r2 get KEY                      Download object to stdout
 #   cf-r2 put KEY [--file PATH]        Upload from stdin or file
 #   cf-r2 head KEY                     Get object metadata
@@ -25,7 +25,7 @@ usage() {
     exit "${1:-0}"
 }
 
-[ $# -lt 1 ] && usage 1
+[ $# -lt 1 ] && usage 0
 
 # Validate env
 for var in R2_ENDPOINT_URL R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET_NAME; do
@@ -114,9 +114,18 @@ shift
 
 case "$ACTION" in
     ls)
-        PREFIX="${1:-}"
+        PREFIX=""
+        MAX_KEYS=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --limit) MAX_KEYS="$2"; shift 2 ;;
+                -*) echo "{\"error\": \"Unknown flag: $1\"}" >&2; exit 1 ;;
+                *) PREFIX="$1"; shift ;;
+            esac
+        done
         QUERY=""
         [ -n "$PREFIX" ] && QUERY="prefix=${PREFIX}&"
+        [ -n "$MAX_KEYS" ] && QUERY="${QUERY}max-keys=${MAX_KEYS}&"
         QUERY="${QUERY}list-type=2"
         _s3_request GET "/" "" "$QUERY" | _xml_list_to_json
         ;;

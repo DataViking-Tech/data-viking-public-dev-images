@@ -23,7 +23,7 @@ usage() {
     exit "${1:-0}"
 }
 
-[ $# -lt 1 ] && usage 1
+[ $# -lt 1 ] && usage 0
 
 # Build base URL from available env vars
 if [ -n "${AIVEN_KAFKA_REST_SERVICE_URI:-}" ]; then
