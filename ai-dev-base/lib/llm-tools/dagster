@@ -1,0 +1,235 @@
+#!/bin/bash
+# dagster — Interact with Dagster Cloud via GraphQL API
+#
+# Usage:
+#   dagster runs [--limit N] [--status STATUS]    List recent runs
+#   dagster run-detail RUN_ID                      Get details for a specific run
+#   dagster run-logs RUN_ID [--limit N]            Get logs/events for a run
+#   dagster launch JOB_NAME [--tags '{}']          Launch a job run
+#   dagster cancel RUN_ID                          Cancel a running job
+#   dagster jobs                                   List all jobs
+#   dagster assets [--prefix GROUP]                List asset keys
+#   dagster repos                                  List code locations
+#   dagster graphql 'QUERY' ['{"var":"val"}']      Raw GraphQL query
+#
+# Output: JSON
+# Requires: DAGSTER_ORG, DAGSTER_TOKEN env vars
+#   Optional: DAGSTER_DEPLOYMENT (default: prod)
+#
+# Examples:
+#   dagster runs --limit 5 --status FAILURE
+#   dagster launch mtg_pricing_daily
+#   dagster run-logs 86fc4730-5a61-4f05-823c-32d41f467270 --limit 20
+#   dagster graphql '{ runsOrError(limit: 1) { ... on Runs { results { runId status } } } }'
+
+set -euo pipefail
+
+usage() {
+    sed -n '2,/^[^#]/{ /^#/s/^# \?//p }' "$0"
+    exit "${1:-0}"
+}
+
+[ $# -lt 1 ] && usage 1
+
+for var in DAGSTER_ORG DAGSTER_TOKEN; do
+    if [ -z "${!var:-}" ]; then
+        echo "{\"error\": \"${var} not set. Run doppler login or check .env\"}" >&2
+        exit 1
+    fi
+done
+
+DEPLOYMENT="${DAGSTER_DEPLOYMENT:-prod}"
+BASE_URL="https://${DAGSTER_ORG}.dagster.cloud/${DEPLOYMENT}/graphql"
+
+_gql() {
+    local query="$1"
+    local variables="${2:-"{}"}"
+    local payload
+    payload=$(printf '%s' "$variables" | jq --arg q "$query" '{query: $q, variables: .}')
+
+    local response
+    response=$(curl -s -S -X POST "$BASE_URL" \
+        -H "Content-Type: application/json" \
+        -H "Dagster-Cloud-Api-Token: ${DAGSTER_TOKEN}" \
+        -d "$payload" 2>&1)
+
+    if echo "$response" | jq -e '.errors' >/dev/null 2>&1; then
+        echo "$response" | jq '{errors: .errors}' >&2
+        exit 1
+    fi
+    echo "$response" | jq '.data'
+}
+
+ACTION="$1"
+shift
+
+case "$ACTION" in
+    runs)
+        LIMIT=10
+        STATUS_FILTER=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --limit) LIMIT="$2"; shift 2 ;;
+                --status) STATUS_FILTER="$2"; shift 2 ;;
+                *) echo "{\"error\": \"Unknown arg: $1\"}" >&2; exit 1 ;;
+            esac
+        done
+        if [ -n "$STATUS_FILTER" ]; then
+            _gql "query(\$limit: Int!, \$status: RunStatus!) {
+                runsOrError(limit: \$limit, filter: { statuses: [\$status] }) {
+                    ... on Runs { results { runId status jobName startTime endTime } }
+                    ... on InvalidPipelineRunsFilterError { message }
+                    ... on PythonError { message }
+                }
+            }" "{\"limit\": $LIMIT, \"status\": \"$STATUS_FILTER\"}" | jq '.runsOrError.results // .runsOrError'
+        else
+            _gql "query(\$limit: Int!) {
+                runsOrError(limit: \$limit) {
+                    ... on Runs { results { runId status jobName startTime endTime } }
+                    ... on PythonError { message }
+                }
+            }" "{\"limit\": $LIMIT}" | jq '.runsOrError.results // .runsOrError'
+        fi
+        ;;
+
+    run-detail)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: dagster run-detail RUN_ID"}' >&2; exit 1; }
+        RUN_ID="$1"
+        _gql "query(\$runId: ID!) {
+            runOrError(runId: \$runId) {
+                ... on Run {
+                    runId status jobName mode startTime endTime
+                    tags { key value }
+                    stats { ... on RunStatsSnapshot {
+                        stepsSucceeded stepsFailed materializations expectations
+                    }}
+                }
+                ... on RunNotFoundError { message }
+                ... on PythonError { message }
+            }
+        }" "{\"runId\": \"$RUN_ID\"}" | jq '.runOrError'
+        ;;
+
+    run-logs)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: dagster run-logs RUN_ID [--limit N]"}' >&2; exit 1; }
+        RUN_ID="$1"; shift
+        LIMIT=50
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --limit) LIMIT="$2"; shift 2 ;;
+                *) echo "{\"error\": \"Unknown arg: $1\"}" >&2; exit 1 ;;
+            esac
+        done
+        _gql "query(\$runId: ID!, \$limit: Int!) {
+            logsForRun(runId: \$runId, limit: \$limit) {
+                ... on EventConnection {
+                    events {
+                        ... on MessageEvent {
+                            timestamp
+                            level
+                            message
+                            stepKey
+                            eventType
+                        }
+                    }
+                }
+                ... on PythonError { message }
+            }
+        }" "{\"runId\": \"$RUN_ID\", \"limit\": $LIMIT}" | jq '[.logsForRun.events[]? | select(.timestamp != null)] // .logsForRun'
+        ;;
+
+    launch)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: dagster launch JOB_NAME [--tags JSON]"}' >&2; exit 1; }
+        JOB_NAME="$1"; shift
+        TAGS="{}"
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --tags) TAGS="$2"; shift 2 ;;
+                *) echo "{\"error\": \"Unknown arg: $1\"}" >&2; exit 1 ;;
+            esac
+        done
+        # Convert tags JSON to array of {key, value}
+        TAGS_ARRAY=$(echo "$TAGS" | jq '[to_entries[] | {key, value: (.value | tostring)}]')
+        _gql "mutation(\$jobName: String!, \$tags: [ExecutionTag!]) {
+            launchRun(executionParams: {
+                selector: { jobName: \$jobName }
+                runConfigData: {}
+                executionMetadata: { tags: \$tags }
+            }) {
+                ... on LaunchRunSuccess { run { runId status } }
+                ... on InvalidStepError { invalidStepKey }
+                ... on InvalidOutputError { invalidOutputName }
+                ... on RunConfigValidationInvalid { errors { message } }
+                ... on PythonError { message }
+                ... on RunConflict { message }
+            }
+        }" "{\"jobName\": \"$JOB_NAME\", \"tags\": $TAGS_ARRAY}" | jq '.launchRun'
+        ;;
+
+    cancel)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: dagster cancel RUN_ID"}' >&2; exit 1; }
+        _gql "mutation(\$runId: String!) {
+            terminateRun(runId: \$runId) {
+                ... on TerminateRunSuccess { run { runId status } }
+                ... on TerminateRunFailure { message }
+                ... on RunNotFoundError { message }
+                ... on PythonError { message }
+            }
+        }" "{\"runId\": \"$1\"}" | jq '.terminateRun'
+        ;;
+
+    jobs)
+        _gql "{
+            repositoriesOrError {
+                ... on RepositoryConnection {
+                    nodes {
+                        name
+                        location { name }
+                        jobs { name description schedules { name cronSchedule } }
+                    }
+                }
+                ... on PythonError { message }
+            }
+        }" | jq '.repositoriesOrError.nodes // .repositoriesOrError'
+        ;;
+
+    assets)
+        PREFIX="${1:-}"
+        if [ -n "$PREFIX" ]; then
+            _gql "query(\$prefix: [String!]) {
+                assetsOrError(prefix: \$prefix) {
+                    ... on AssetConnection { nodes { key { path } } }
+                    ... on PythonError { message }
+                }
+            }" "{\"prefix\": [\"$PREFIX\"]}" | jq '[.assetsOrError.nodes[]?.key.path] // .assetsOrError'
+        else
+            _gql "{
+                assetsOrError {
+                    ... on AssetConnection { nodes { key { path } } }
+                    ... on PythonError { message }
+                }
+            }" | jq '[.assetsOrError.nodes[]?.key.path] // .assetsOrError'
+        fi
+        ;;
+
+    repos)
+        _gql "{
+            repositoriesOrError {
+                ... on RepositoryConnection {
+                    nodes { name location { name } }
+                }
+                ... on PythonError { message }
+            }
+        }" | jq '.repositoriesOrError.nodes // .repositoriesOrError'
+        ;;
+
+    graphql)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: dagster graphql QUERY [VARIABLES_JSON]"}' >&2; exit 1; }
+        QUERY="$1"
+        VARS="${2:-{}}"
+        _gql "$QUERY" "$VARS"
+        ;;
+
+    -h|--help) usage 0 ;;
+    *) echo "{\"error\": \"Unknown action: ${ACTION}. Use: runs, run-detail, run-logs, launch, cancel, jobs, assets, repos, graphql\"}" >&2; exit 1 ;;
+esac

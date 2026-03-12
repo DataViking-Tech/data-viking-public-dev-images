@@ -1,0 +1,111 @@
+#!/bin/bash
+# kafka-rest — Interact with Aiven Kafka via REST proxy
+#
+# Usage:
+#   kafka-rest topics                          List all topics
+#   kafka-rest produce TOPIC '{"key":"val"}'   Produce a message
+#   kafka-rest consume TOPIC [GROUP_ID]        Consume messages (creates consumer, reads, deletes)
+#   kafka-rest schema TOPIC                    Get topic config/schema info
+#
+# Output: JSON
+# Requires: AIVEN_KAFKA_REST_SERVICE_URI env var
+#   (or AIVEN_KAFKA_REST_HOST, AIVEN_KAFKA_REST_PORT, AIVEN_KAFKA_REST_USER, AIVEN_KAFKA_REST_PASSWORD)
+#
+# Examples:
+#   kafka-rest topics
+#   kafka-rest produce mtg.pricing.api '{"card_id": "123", "price": 4.99}'
+#   kafka-rest consume mtg.pricing.api my-consumer-group
+
+set -euo pipefail
+
+usage() {
+    sed -n '2,/^[^#]/{ /^#/s/^# \?//p }' "$0"
+    exit "${1:-0}"
+}
+
+[ $# -lt 1 ] && usage 1
+
+# Build base URL from available env vars
+if [ -n "${AIVEN_KAFKA_REST_SERVICE_URI:-}" ]; then
+    BASE_URL="${AIVEN_KAFKA_REST_SERVICE_URI}"
+elif [ -n "${AIVEN_KAFKA_REST_HOST:-}" ]; then
+    USER="${AIVEN_KAFKA_REST_USER:-avnadmin}"
+    PASS="${AIVEN_KAFKA_REST_PASSWORD:-}"
+    PORT="${AIVEN_KAFKA_REST_PORT:-24653}"
+    BASE_URL="https://${USER}:${PASS}@${AIVEN_KAFKA_REST_HOST}:${PORT}"
+else
+    echo '{"error": "No Kafka REST config. Set AIVEN_KAFKA_REST_SERVICE_URI or component vars."}' >&2
+    exit 1
+fi
+
+_curl() {
+    curl -s -S -H "Content-Type: application/vnd.kafka.json.v2+json" \
+         -H "Accept: application/vnd.kafka.v2+json" \
+         "$@" 2>&1
+}
+
+_jq_or_raw() {
+    local input
+    input=$(cat)
+    if echo "$input" | jq . >/dev/null 2>&1; then
+        echo "$input" | jq .
+    else
+        echo "$input"
+    fi
+}
+
+ACTION="$1"
+shift
+
+case "$ACTION" in
+    topics)
+        _curl "${BASE_URL}/topics" | _jq_or_raw
+        ;;
+
+    produce)
+        [ $# -lt 2 ] && { echo '{"error": "Usage: kafka-rest produce TOPIC JSON_VALUE"}' >&2; exit 1; }
+        TOPIC="$1"
+        VALUE="$2"
+        # Wrap value in Kafka REST produce format
+        PAYLOAD="{\"records\": [{\"value\": ${VALUE}}]}"
+        _curl -X POST "${BASE_URL}/topics/${TOPIC}" -d "$PAYLOAD" | _jq_or_raw
+        ;;
+
+    consume)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: kafka-rest consume TOPIC [GROUP_ID]"}' >&2; exit 1; }
+        TOPIC="$1"
+        GROUP="${2:-llm-tools-$$}"
+        INSTANCE="llm-consumer-$$"
+
+        # Create consumer instance
+        CREATE_RESP=$(_curl -X POST "${BASE_URL}/consumers/${GROUP}" \
+            -d "{\"name\": \"${INSTANCE}\", \"format\": \"json\", \"auto.offset.reset\": \"earliest\"}")
+
+        BASE_URI=$(echo "$CREATE_RESP" | jq -r '.base_uri // empty' 2>/dev/null)
+        if [ -z "$BASE_URI" ]; then
+            echo "$CREATE_RESP" | _jq_or_raw >&2
+            exit 1
+        fi
+
+        # Subscribe to topic
+        _curl -X POST "${BASE_URI}/subscription" \
+            -d "{\"topics\": [\"${TOPIC}\"]}" >/dev/null
+
+        # Poll for messages (two polls — first may return empty per Kafka protocol)
+        _curl "${BASE_URI}/records" >/dev/null
+        MESSAGES=$(_curl "${BASE_URI}/records")
+
+        # Clean up consumer
+        _curl -X DELETE "${BASE_URI}" >/dev/null 2>&1 || true
+
+        echo "$MESSAGES" | _jq_or_raw
+        ;;
+
+    schema)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: kafka-rest schema TOPIC"}' >&2; exit 1; }
+        _curl "${BASE_URL}/topics/$1" | _jq_or_raw
+        ;;
+
+    -h|--help) usage 0 ;;
+    *) echo "{\"error\": \"Unknown action: ${ACTION}. Use: topics, produce, consume, schema\"}" >&2; exit 1 ;;
+esac

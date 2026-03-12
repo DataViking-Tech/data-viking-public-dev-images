@@ -16,6 +16,11 @@ if [ -d "/opt/dev-infra" ]; then
     _ai_dev_old_opts=$(set +o)
     _ai_dev_old_shopt=$(shopt -p 2>/dev/null || true)
 
+    # Environment variable hydration (Doppler-first, .env fallback)
+    if [ -f "/opt/dev-infra/env_hydrate.sh" ]; then
+        source "/opt/dev-infra/env_hydrate.sh" 2>/dev/null || true
+    fi
+
     # Credential caching framework (github, cloudflare, claude auth)
     # Note: setup runs non-interactively via postStartCommand (start_gastown_services.sh).
     # This interactive-shell call catches credentials added mid-session.

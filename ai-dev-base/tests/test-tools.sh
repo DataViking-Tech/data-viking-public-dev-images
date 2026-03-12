@@ -80,6 +80,9 @@ test_command "OpenAI Codex CLI" "codex --version || which codex" ""
 # Test Wrangler CLI (outputs version number only, e.g., "4.63.0")
 test_command "Wrangler CLI" "wrangler --version" "[0-9]"
 
+# Test PostgreSQL client
+test_command "PostgreSQL client (psql)" "psql --version" "psql"
+
 # Test Python and ai-coding-utils modules
 echo -n "Testing ai-coding-utils modules... "
 if python3 -c "import slack; import beads" 2>/dev/null; then
@@ -103,6 +106,7 @@ echo -n "Testing dev-infra components... "
 if [ -f /opt/dev-infra/credential_cache.sh ] && \
    [ -f /opt/dev-infra/directories.sh ] && \
    [ -f /opt/dev-infra/python_venv.sh ] && \
+   [ -f /opt/dev-infra/env_hydrate.sh ] && \
    [ -f /opt/dev-infra/git_hooks.sh ] && \
    [ -f /opt/dev-infra/setup/project_setup.sh ] && \
    [ -f /opt/dev-infra/secrets/manager.py ]; then
