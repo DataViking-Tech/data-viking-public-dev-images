@@ -1,0 +1,175 @@
+#!/bin/bash
+# dbx — Interact with Databricks via REST API
+#
+# Usage:
+#   dbx sql "SELECT * FROM catalog.schema.table LIMIT 5"   Execute SQL query
+#   dbx warehouses                                          List SQL warehouses
+#   dbx warehouse-start [WAREHOUSE_ID]                      Start a warehouse
+#   dbx warehouse-stop [WAREHOUSE_ID]                       Stop a warehouse
+#   dbx jobs [--limit N]                                    List jobs
+#   dbx job-run JOB_ID                                      Trigger a job run
+#   dbx job-status RUN_ID                                   Get run status
+#   dbx clusters                                            List clusters
+#   dbx api METHOD /path ['{"body":"json"}']                Raw API call
+#
+# Output: JSON
+# Requires: DATABRICKS_HOST, DATABRICKS_TOKEN env vars
+#   Optional: DATABRICKS_HTTP_PATH (for default SQL warehouse)
+#
+# Examples:
+#   dbx sql "SHOW TABLES IN mtg_data"
+#   dbx warehouses
+#   dbx jobs --limit 5
+#   dbx api GET /api/2.0/workspace/list '{"path": "/"}'
+
+set -euo pipefail
+
+usage() {
+    sed -n '2,/^[^#]/{ /^#/s/^# \?//p }' "$0"
+    exit "${1:-0}"
+}
+
+[ $# -lt 1 ] && usage 1
+
+for var in DATABRICKS_HOST DATABRICKS_TOKEN; do
+    if [ -z "${!var:-}" ]; then
+        echo "{\"error\": \"${var} not set. Run doppler login or check .env\"}" >&2
+        exit 1
+    fi
+done
+
+BASE_URL="https://${DATABRICKS_HOST}"
+
+_dbx_api() {
+    local method="$1" path="$2" body="${3:-}"
+    local curl_args=(
+        -s -S
+        -X "$method"
+        -H "Authorization: Bearer ${DATABRICKS_TOKEN}"
+        -H "Content-Type: application/json"
+    )
+    [ -n "$body" ] && curl_args+=(-d "$body")
+
+    local response
+    response=$(curl "${curl_args[@]}" "${BASE_URL}${path}" 2>&1)
+
+    if echo "$response" | jq -e '.error_code' >/dev/null 2>&1; then
+        echo "$response" | jq . >&2
+        exit 1
+    fi
+    echo "$response" | jq . 2>/dev/null || echo "$response"
+}
+
+# Extract warehouse ID from DATABRICKS_HTTP_PATH or use provided one
+_warehouse_id() {
+    local provided="${1:-}"
+    if [ -n "$provided" ]; then
+        echo "$provided"
+    elif [ -n "${DATABRICKS_HTTP_PATH:-}" ]; then
+        # Extract ID from /sql/1.0/warehouses/<id>
+        echo "$DATABRICKS_HTTP_PATH" | grep -oP '[^/]+$'
+    else
+        echo ""
+    fi
+}
+
+ACTION="$1"
+shift
+
+case "$ACTION" in
+    sql)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: dbx sql \"SQL QUERY\""}' >&2; exit 1; }
+        QUERY="$1"
+        WH_ID=$(_warehouse_id "${2:-}")
+
+        if [ -z "$WH_ID" ]; then
+            echo '{"error": "No warehouse ID. Set DATABRICKS_HTTP_PATH or pass warehouse ID as second arg."}' >&2
+            exit 1
+        fi
+
+        PAYLOAD=$(jq -n --arg q "$QUERY" --arg wh "$WH_ID" \
+            '{statement: $q, warehouse_id: $wh, wait_timeout: "30s", format: "JSON_ARRAY"}')
+
+        RESPONSE=$(_dbx_api POST /api/2.0/sql/statements "$PAYLOAD")
+
+        # Check if statement is still running
+        STATUS=$(echo "$RESPONSE" | jq -r '.status.state // empty')
+
+        case "$STATUS" in
+            SUCCEEDED)
+                # Return data with column names
+                echo "$RESPONSE" | jq '{
+                    columns: [.manifest.schema.columns[]?.name],
+                    data: .result.data_array,
+                    row_count: .manifest.total_row_count,
+                    truncated: .manifest.truncated
+                }'
+                ;;
+            PENDING|RUNNING)
+                STMT_ID=$(echo "$RESPONSE" | jq -r '.statement_id')
+                echo "{\"status\": \"$STATUS\", \"statement_id\": \"$STMT_ID\", \"hint\": \"Poll with: dbx api GET /api/2.0/sql/statements/$STMT_ID\"}"
+                ;;
+            *)
+                echo "$RESPONSE" | jq '{status: .status, error: .status.error // null}'
+                ;;
+        esac
+        ;;
+
+    warehouses)
+        _dbx_api GET /api/2.0/sql/warehouses | jq '[.warehouses[]? | {id, name, state, cluster_size, num_clusters, auto_stop_mins}]'
+        ;;
+
+    warehouse-start)
+        WH_ID=$(_warehouse_id "${1:-}")
+        [ -z "$WH_ID" ] && { echo '{"error": "No warehouse ID. Set DATABRICKS_HTTP_PATH or pass ID as argument."}' >&2; exit 1; }
+        _dbx_api POST "/api/2.0/sql/warehouses/${WH_ID}/start" "{}"
+        echo "{\"status\": \"starting\", \"warehouse_id\": \"$WH_ID\"}"
+        ;;
+
+    warehouse-stop)
+        WH_ID=$(_warehouse_id "${1:-}")
+        [ -z "$WH_ID" ] && { echo '{"error": "No warehouse ID. Set DATABRICKS_HTTP_PATH or pass ID as argument."}' >&2; exit 1; }
+        _dbx_api POST "/api/2.0/sql/warehouses/${WH_ID}/stop" "{}"
+        echo "{\"status\": \"stopping\", \"warehouse_id\": \"$WH_ID\"}"
+        ;;
+
+    jobs)
+        LIMIT=20
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --limit) LIMIT="$2"; shift 2 ;;
+                *) echo "{\"error\": \"Unknown arg: $1\"}" >&2; exit 1 ;;
+            esac
+        done
+        _dbx_api GET "/api/2.1/jobs/list?limit=${LIMIT}" | jq '[.jobs[]? | {job_id, name: .settings.name, schedule: .settings.schedule}]'
+        ;;
+
+    job-run)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: dbx job-run JOB_ID"}' >&2; exit 1; }
+        _dbx_api POST /api/2.1/jobs/run-now "{\"job_id\": $1}"
+        ;;
+
+    job-status)
+        [ $# -lt 1 ] && { echo '{"error": "Usage: dbx job-status RUN_ID"}' >&2; exit 1; }
+        _dbx_api GET "/api/2.1/jobs/runs/get?run_id=$1" | jq '{
+            run_id: .run_id,
+            job_id: .job_id,
+            state: .state,
+            start_time: .start_time,
+            end_time: .end_time,
+            tasks: [.tasks[]? | {task_key: .task_key, state: .state}]
+        }'
+        ;;
+
+    clusters)
+        _dbx_api GET /api/2.0/clusters/list | jq '[.clusters[]? | {cluster_id, cluster_name, state, driver_node_type_id, num_workers}]'
+        ;;
+
+    api)
+        [ $# -lt 2 ] && { echo '{"error": "Usage: dbx api METHOD /path [BODY_JSON]"}' >&2; exit 1; }
+        _dbx_api "$1" "$2" "${3:-}"
+        ;;
+
+    -h|--help) usage 0 ;;
+    *) echo "{\"error\": \"Unknown action: ${ACTION}. Use: sql, warehouses, warehouse-start, warehouse-stop, jobs, job-run, job-status, clusters, api\"}" >&2; exit 1 ;;
+esac
