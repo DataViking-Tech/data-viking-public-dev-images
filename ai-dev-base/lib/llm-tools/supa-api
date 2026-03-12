@@ -1,0 +1,87 @@
+#!/bin/bash
+# supa-api — Query Supabase REST API (PostgREST)
+#
+# Usage:
+#   supa-api GET /rest/v1/TABLE_NAME [query_params]
+#   supa-api POST /rest/v1/TABLE_NAME --data '{"col": "val"}'
+#   supa-api GET /rest/v1/TABLE_NAME "select=id,name&limit=5"
+#
+# Output: JSON response from Supabase
+# Requires: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY env vars
+#
+# Common endpoints:
+#   /rest/v1/TABLE         PostgREST CRUD
+#   /rest/v1/rpc/FUNC      Call a database function
+#   /auth/v1/admin/users   List auth users
+#
+# Examples:
+#   supa-api GET /rest/v1/cards "select=id,name&limit=3"
+#   supa-api POST /rest/v1/rpc/my_function --data '{"arg1": "val"}'
+#   supa-api GET /auth/v1/admin/users
+
+set -euo pipefail
+
+usage() {
+    sed -n '2,/^[^#]/{ /^#/s/^# \?//p }' "$0"
+    exit "${1:-0}"
+}
+
+[ $# -lt 2 ] && usage 1
+
+METHOD="${1^^}"
+ENDPOINT="$2"
+shift 2
+
+if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+    echo '{"error": "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set. Run doppler login or check .env"}' >&2
+    exit 1
+fi
+
+# Build URL
+URL="${SUPABASE_URL}${ENDPOINT}"
+
+# Parse remaining args
+QUERY_PARAMS=""
+DATA=""
+EXTRA_HEADERS=()
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help) usage 0 ;;
+        --data) DATA="$2"; shift 2 ;;
+        --header) EXTRA_HEADERS+=(-H "$2"); shift 2 ;;
+        --prefer) EXTRA_HEADERS+=(-H "Prefer: $2"); shift 2 ;;
+        --single) EXTRA_HEADERS+=(-H "Accept: application/vnd.pgrst.object+json"); shift ;;
+        -*) echo "{\"error\": \"unknown flag: $1\"}" >&2; exit 1 ;;
+        *) QUERY_PARAMS="$1"; shift ;;
+    esac
+done
+
+[ -n "$QUERY_PARAMS" ] && URL="${URL}?${QUERY_PARAMS}"
+
+# Build curl command
+CURL_ARGS=(
+    -s -S
+    -X "$METHOD"
+    -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}"
+    -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}"
+    -H "Content-Type: application/json"
+    "${EXTRA_HEADERS[@]+"${EXTRA_HEADERS[@]}"}"
+)
+
+[ -n "$DATA" ] && CURL_ARGS+=(-d "$DATA")
+
+response=$(curl "${CURL_ARGS[@]}" "$URL" 2>&1)
+http_code=$?
+
+if [ $http_code -ne 0 ]; then
+    echo "{\"error\": \"curl failed\", \"details\": $(echo "$response" | jq -Rs .)}" >&2
+    exit 1
+fi
+
+# Pretty-print if valid JSON, otherwise wrap
+if echo "$response" | jq . >/dev/null 2>&1; then
+    echo "$response" | jq .
+else
+    echo "$response"
+fi

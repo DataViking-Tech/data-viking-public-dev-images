@@ -1,0 +1,84 @@
+#!/bin/bash
+# supa-query — Run SQL against Supabase via psql
+#
+# Usage:
+#   supa-query "SELECT * FROM users LIMIT 5"
+#   supa-query --file path/to/query.sql
+#   echo "SELECT 1" | supa-query
+#
+# Output: JSON array of rows (default) or tabular with --table
+# Requires: DATABASE_URL env var
+#
+# Examples:
+#   supa-query "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+#   supa-query "SELECT count(*) FROM cards" --table
+#   supa-query --file migrations/check.sql
+
+set -euo pipefail
+
+usage() {
+    sed -n '2,/^[^#]/{ /^#/s/^# \?//p }' "$0"
+    exit "${1:-0}"
+}
+
+FORMAT="json"
+QUERY=""
+FILE=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help) usage 0 ;;
+        --table) FORMAT="table"; shift ;;
+        --file) FILE="$2"; shift 2 ;;
+        --) shift; QUERY="$*"; break ;;
+        -*) echo "Error: unknown flag: $1" >&2; usage 1 ;;
+        *) QUERY="$1"; shift ;;
+    esac
+done
+
+if [ -z "${DATABASE_URL:-}" ]; then
+    echo '{"error": "DATABASE_URL not set. Run doppler login or check .env"}' >&2
+    exit 1
+fi
+
+# Build psql args
+PSQL_ARGS=(-d "$DATABASE_URL" --no-psqlrc -v ON_ERROR_STOP=1)
+
+if [ "$FORMAT" = "json" ]; then
+    PSQL_ARGS+=(-t -A)
+    # Wrap query to return JSON
+    if [ -n "$FILE" ]; then
+        SQL=$(cat "$FILE")
+    elif [ -n "$QUERY" ]; then
+        SQL="$QUERY"
+    elif [ ! -t 0 ]; then
+        SQL=$(cat)
+    else
+        echo '{"error": "No query provided. Pass SQL as argument, --file, or pipe to stdin"}' >&2
+        exit 1
+    fi
+    # Use json_agg for structured output
+    WRAPPED="SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM ($SQL) t;"
+    echo "$WRAPPED" | psql "${PSQL_ARGS[@]}" 2>&1 | {
+        # If psql errors, wrap in JSON error
+        output=$(cat)
+        if echo "$output" | jq . >/dev/null 2>&1; then
+            echo "$output" | jq .
+        else
+            echo "{\"error\": $(echo "$output" | jq -Rs .)}" >&2
+            exit 1
+        fi
+    }
+else
+    # Tabular output
+    if [ -n "$FILE" ]; then
+        psql "${PSQL_ARGS[@]}" -f "$FILE"
+    elif [ -n "$QUERY" ]; then
+        echo "$QUERY" | psql "${PSQL_ARGS[@]}"
+    elif [ ! -t 0 ]; then
+        psql "${PSQL_ARGS[@]}"
+    else
+        echo "Error: No query provided." >&2
+        exit 1
+    fi
+fi

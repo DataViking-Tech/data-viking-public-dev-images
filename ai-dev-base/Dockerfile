@@ -43,7 +43,7 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     sudo locales \
     ca-certificates gnupg2 openssh-client git curl wget make \
-    tmux sqlite3 jq bash-completion procps unzip libicu72 && \
+    tmux sqlite3 jq bash-completion procps unzip libicu72 postgresql-client && \
     # --- vscode user ---
     groupadd --gid 1000 vscode && \
     useradd --uid 1000 --gid 1000 -m -s /bin/bash vscode && \
@@ -157,6 +157,8 @@ COPY lib/agent-configs/claude-agents/ /opt/agent-configs/claude-agents/
 COPY lib/agent-configs/github-agents/ /opt/agent-configs/github-agents/
 COPY lib/dev-infra/components/ /opt/dev-infra/
 COPY lib/dev-infra/secrets /opt/dev-infra/secrets
+COPY lib/llm-tools/ /opt/llm-tools/
+COPY lib/dev-infra/env_hydrate.sh /opt/dev-infra/env_hydrate.sh
 COPY lib/dev-infra/setup /opt/dev-infra/setup
 COPY lib/dev-infra/profile.sh /etc/profile.d/ai-dev-utils.sh
 COPY tests/test-tools.sh /usr/local/bin/test-tools.sh
@@ -172,6 +174,8 @@ RUN mkdir -p /workspaces && chown vscode:vscode /workspaces
 # single layer to minimize overhead.
 RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 \
     requests>=2.28.0 pyyaml>=6.0 watchdog>=3.0.0 python-dotenv>=1.0.0 && \
+    chmod +x /opt/llm-tools/* && \
+    ln -sf /opt/llm-tools/* /usr/local/bin/ && \
     chmod +x /opt/dev-infra/*.sh /opt/dev-infra/setup/*.sh \
     /opt/ai-coding-utils/beads/setup/ensure_beads.sh \
     /etc/profile.d/ai-dev-utils.sh \
