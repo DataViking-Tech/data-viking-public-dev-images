@@ -28,7 +28,7 @@ jobs:
 
       - name: Check if ai-dev-base also changed
         id: base-changes
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             base:
@@ -66,7 +66,7 @@ jobs:
 
       - name: Check if ai-dev-base also changed
         id: base-changes
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             base:
