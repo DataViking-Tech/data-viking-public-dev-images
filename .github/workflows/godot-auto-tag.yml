@@ -27,7 +27,7 @@ jobs:
 
       - name: Check if godot-game-dev changed
         id: changes
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             godot:
