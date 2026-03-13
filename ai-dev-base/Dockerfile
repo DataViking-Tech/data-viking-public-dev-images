@@ -33,7 +33,7 @@ FROM debian:bookworm-slim
 ARG GASTOWN_VERSION=0.12.0
 ARG DOLT_VERSION=1.83.5
 ARG CODEX_VERSION=0.114.0
-ARG WRANGLER_VERSION=4.72.0
+ARG WRANGLER_VERSION=4.73.0
 
 # Create vscode user, set up locale, and install all system packages in a
 # single apt transaction. No build-essential — all compiled binaries come
