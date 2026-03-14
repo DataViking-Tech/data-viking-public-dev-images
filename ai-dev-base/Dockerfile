@@ -30,7 +30,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM debian:bookworm-slim
 
 # Build arguments for external binary versions
-ARG GASTOWN_VERSION=0.12.0
+ARG GASTOWN_VERSION=v0.12.1-dv
+ARG GASTOWN_REPO=DataViking-Tech/gastown
 ARG DOLT_VERSION=1.83.5
 ARG CODEX_VERSION=0.114.0
 ARG WRANGLER_VERSION=4.73.0
@@ -105,7 +106,7 @@ ENV BUN_INSTALL="/usr/local"
 RUN set -e && \
     # Gastown
     ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
-    wget -q "https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/gastown.tar.gz && \
+    wget -q "https://github.com/${GASTOWN_REPO}/releases/download/${GASTOWN_VERSION}/gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/gastown.tar.gz && \
     tar xzf /tmp/gastown.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/gt && \
     rm /tmp/gastown.tar.gz && \
