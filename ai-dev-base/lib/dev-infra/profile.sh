@@ -62,6 +62,17 @@ if [ -d "/opt/dev-infra" ]; then
     unset _ai_dev_old_opts _ai_dev_old_shopt
 fi
 
+# Claude Code native installer path: self-updates land in ~/.claude/local/
+# This must precede the system /usr/local/bin/claude so the updated version wins.
+if [ -d "$HOME/.claude/local" ]; then
+    export PATH="$HOME/.claude/local:$PATH"
+fi
+
+# Amp CLI self-update path: updates land in ~/.amp/bin/
+if [ -d "$HOME/.amp/bin" ]; then
+    export PATH="$HOME/.amp/bin:$PATH"
+fi
+
 # Standard bash aliases
 alias bd-ready='bd ready'
 alias bd-sync='bd sync'
