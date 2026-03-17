@@ -68,9 +68,12 @@ if [ -d "$HOME/.claude/local" ]; then
     export PATH="$HOME/.claude/local:$PATH"
 fi
 
-# Amp CLI self-update path: updates land in ~/.amp/bin/
+# Amp CLI: installer puts binary in ~/.amp/bin and symlink in ~/.local/bin
 if [ -d "$HOME/.amp/bin" ]; then
     export PATH="$HOME/.amp/bin:$PATH"
+fi
+if [ -d "$HOME/.local/bin" ]; then
+    export PATH="$HOME/.local/bin:$PATH"
 fi
 
 # Standard bash aliases
