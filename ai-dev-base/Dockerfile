@@ -171,6 +171,11 @@ ENV PYTHONPATH="/opt/ai-coding-utils"
 # Must precede test-tools.sh which validates this ownership.
 RUN mkdir -p /workspaces && chown vscode:vscode /workspaces
 
+# Trust all repos in the container. Bind mounts appear root-owned; Git's
+# ownership check is a multi-user safety guard that doesn't apply in a
+# single-user disposable devcontainer.
+RUN git config --system --add safe.directory '*'
+
 # Install Python deps, set permissions, configure shell, validate tools —
 # single layer to minimize overhead.
 RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 \
@@ -230,7 +235,7 @@ LABEL devcontainer.metadata='[{ \
     } \
   }, \
   "postCreateCommand": "cp /usr/local/share/image-docs/UTILITIES.md .devcontainer/UTILITIES.md 2>/dev/null || true; [ ! -f .gitattributes ] && cp /usr/local/share/image-docs/.gitattributes .gitattributes 2>/dev/null || true; [ ! -f CLAUDE.md ] && cp /usr/local/share/image-docs/CLAUDE.md CLAUDE.md 2>/dev/null || true; [ ! -f .devcontainer/crew.json ] && cp /usr/local/share/image-docs/crew.json .devcontainer/crew.json 2>/dev/null || true; /opt/ai-coding-utils/beads/setup/ensure_beads.sh; /opt/dev-infra/setup/ensure_gastown.sh; /opt/dev-infra/setup/ensure_crew.sh; /opt/dev-infra/setup/install-agents.sh", \
-  "postStartCommand": "sudo chown -R vscode:vscode /workspaces && dev-services start" \
+  "postStartCommand": "dev-services start" \
 }]'
 
 WORKDIR /workspaces

@@ -12,14 +12,22 @@
 #   2. Auto-convert environment variables (e.g., GITHUB_TOKEN)
 #   3. Interactive fallback with user instructions
 
-# Detect workspace root path dynamically
-# Supports both /workspaces/<project> and custom paths
-get_workspace_root() {
-  git rev-parse --show-toplevel 2>/dev/null || pwd
+# Resolve project auth directory lazily (not at source time).
+# Falls back to $HOME if not inside a git repo.
+_get_project_auth_dir() {
+  local repo
+  repo=$(git rev-parse --show-toplevel 2>/dev/null || true)
+  if [ -n "$repo" ]; then
+    printf '%s/temp/auth\n' "$repo"
+  else
+    printf '%s/.local/share/dev-infra/auth\n' "$HOME"
+  fi
 }
 
-# Auth directory (always under workspace root)
-AUTH_DIR="$(get_workspace_root)/temp/auth"
+# State directory for sentinels (always under $HOME, never workspace)
+_get_state_dir() {
+  printf '%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}/dev-infra"
+}
 
 # Credential cache logging - writes to stderr for debugging
 # Set CREDENTIAL_CACHE_DEBUG=1 to enable verbose logging
@@ -38,9 +46,11 @@ setup_credential_cache() {
   local failed_services=()
 
   # Create base auth directory (sudo fallback for root-owned workspace mounts)
+  local AUTH_DIR
+  AUTH_DIR="$(_get_project_auth_dir)"
   if ! mkdir -p "$AUTH_DIR" 2>/dev/null; then
     sudo mkdir -p "$AUTH_DIR" 2>/dev/null && \
-      sudo chown -R "$(id -u):$(id -g)" "$(get_workspace_root)/temp" 2>/dev/null || true
+      sudo chown -R "$(id -u):$(id -g)" "$AUTH_DIR" 2>/dev/null || true
   fi
 
   # Validate and setup each service
@@ -65,26 +75,45 @@ setup_credential_cache() {
 }
 
 # GitHub CLI authentication
-# Caches OAuth credentials in temp/auth/gh-config/
+# Primary config in $HOME/.config/gh (owned by vscode, not affected by bind mounts).
+# Supports import from shared volume and legacy workspace cache.
 setup_github_auth() {
-  export GH_CONFIG_DIR="$AUTH_DIR/gh-config"
-  local HOSTS_FILE="$GH_CONFIG_DIR/hosts.yml"
-  local SENTINEL_FILE="$AUTH_DIR/.gh-auth-checked"
+  export GH_CONFIG_DIR="${GH_CONFIG_DIR:-$HOME/.config/gh}"
+  local SENTINEL_FILE
+  SENTINEL_FILE="$(_get_state_dir)/gh-auth-checked"
   local SHARED_GH_DIR="/home/vscode/.shared-auth/gh"
+
+  # Ensure directories exist with correct ownership
+  mkdir -p "$(dirname "$SENTINEL_FILE")" "$GH_CONFIG_DIR" 2>/dev/null || true
+  chmod 700 "$GH_CONFIG_DIR" 2>/dev/null || true
+
+  local HOSTS_FILE="$GH_CONFIG_DIR/hosts.yml"
 
   # Fix Docker volume ownership: Docker creates named volumes as root:root
   if [ -d "$SHARED_GH_DIR" ] && [ ! -w "$SHARED_GH_DIR" ]; then
     sudo chown -R "$(id -u):$(id -g)" "$SHARED_GH_DIR" 2>/dev/null || true
   fi
 
-  # Defensive re-check: even if sentinel exists, re-import from shared if
-  # local GH_CONFIG_DIR is empty but shared volume has credentials.
-  # This handles sessions that start before shared volume is populated.
+  # One-time migration from legacy workspace-local cache (temp/auth/gh-config)
+  if [ ! -f "$HOSTS_FILE" ]; then
+    local LEGACY_GH_DIR
+    LEGACY_GH_DIR="$(_get_project_auth_dir)/gh-config"
+    if [ -d "$LEGACY_GH_DIR" ]; then
+      _cred_log INFO "Migrating gh credentials from legacy workspace cache → $GH_CONFIG_DIR"
+      for f in hosts.yml config.yml; do
+        if sudo test -f "$LEGACY_GH_DIR/$f" 2>/dev/null; then
+          sudo cp "$LEGACY_GH_DIR/$f" "$GH_CONFIG_DIR/$f"
+          sudo chown "$(id -u):$(id -g)" "$GH_CONFIG_DIR/$f"
+        fi
+      done
+      chmod 600 "$GH_CONFIG_DIR/hosts.yml" 2>/dev/null || true
+    fi
+  fi
+
+  # Defensive re-check: re-import from shared if local is empty but shared has credentials
   if [ -f "$SENTINEL_FILE" ]; then
     if [ ! -f "$HOSTS_FILE" ] && [ -d "$SHARED_GH_DIR" ] && [ -f "$SHARED_GH_DIR/hosts.yml" ]; then
       _cred_log INFO "Re-importing gh credentials from shared volume (local was empty)"
-      mkdir -p "$GH_CONFIG_DIR"
-      chmod 700 "$GH_CONFIG_DIR"
       cp "$SHARED_GH_DIR/hosts.yml" "$HOSTS_FILE"
       chmod 600 "$HOSTS_FILE"
       if [ -f "$SHARED_GH_DIR/config.yml" ] && [ ! -f "$GH_CONFIG_DIR/config.yml" ]; then
@@ -101,13 +130,6 @@ setup_github_auth() {
     return 1
   fi
 
-  # Create directory with proper permissions (sudo fallback for root-owned workspace mounts)
-  if ! mkdir -p "$GH_CONFIG_DIR" 2>/dev/null; then
-    sudo mkdir -p "$GH_CONFIG_DIR" 2>/dev/null && \
-      sudo chown -R "$(id -u):$(id -g)" "$GH_CONFIG_DIR" 2>/dev/null || true
-  fi
-  chmod 700 "$GH_CONFIG_DIR" 2>/dev/null || sudo chmod 700 "$GH_CONFIG_DIR" 2>/dev/null || true
-
   # Shared auth volume: import credentials from shared volume
   if [ -d "$SHARED_GH_DIR" ] && [ -f "$SHARED_GH_DIR/hosts.yml" ] && [ ! -f "$HOSTS_FILE" ]; then
     _cred_log INFO "Importing gh credentials from shared volume → $GH_CONFIG_DIR"
@@ -115,18 +137,6 @@ setup_github_auth() {
     chmod 600 "$HOSTS_FILE"
     if [ -f "$SHARED_GH_DIR/config.yml" ] && [ ! -f "$GH_CONFIG_DIR/config.yml" ]; then
       cp "$SHARED_GH_DIR/config.yml" "$GH_CONFIG_DIR/config.yml"
-    fi
-  fi
-
-  # Migrate: if credentials exist in default location but not in cache, copy them
-  local DEFAULT_HOSTS="$HOME/.config/gh/hosts.yml"
-  if [ ! -f "$HOSTS_FILE" ] && [ -f "$DEFAULT_HOSTS" ]; then
-    _cred_log INFO "Migrating gh credentials from default location → $GH_CONFIG_DIR"
-    cp "$DEFAULT_HOSTS" "$HOSTS_FILE"
-    chmod 600 "$HOSTS_FILE"
-    # Also copy config.yml if present
-    if [ -f "$HOME/.config/gh/config.yml" ] && [ ! -f "$GH_CONFIG_DIR/config.yml" ]; then
-      cp "$HOME/.config/gh/config.yml" "$GH_CONFIG_DIR/config.yml"
     fi
   fi
 
@@ -196,19 +206,21 @@ setup_github_auth() {
 # Call from postStartCommand or session startup to ensure credentials
 # are available. Re-imports from shared volume if local is empty.
 verify_credential_propagation() {
-  local HOSTS_FILE="$AUTH_DIR/gh-config/hosts.yml"
+  local GH_DIR="${GH_CONFIG_DIR:-$HOME/.config/gh}"
   local SHARED_GH_DIR="/home/vscode/.shared-auth/gh"
   local repaired=0
+
+  local HOSTS_FILE="$GH_DIR/hosts.yml"
 
   # GitHub: re-import from shared if local is missing
   if [ ! -f "$HOSTS_FILE" ] && [ -d "$SHARED_GH_DIR" ] && [ -f "$SHARED_GH_DIR/hosts.yml" ]; then
     _cred_log INFO "verify: Re-importing gh credentials from shared volume"
-    mkdir -p "$AUTH_DIR/gh-config"
-    chmod 700 "$AUTH_DIR/gh-config"
+    mkdir -p "$GH_DIR"
+    chmod 700 "$GH_DIR" 2>/dev/null || true
     cp "$SHARED_GH_DIR/hosts.yml" "$HOSTS_FILE"
     chmod 600 "$HOSTS_FILE"
-    if [ -f "$SHARED_GH_DIR/config.yml" ] && [ ! -f "$AUTH_DIR/gh-config/config.yml" ]; then
-      cp "$SHARED_GH_DIR/config.yml" "$AUTH_DIR/gh-config/config.yml"
+    if [ -f "$SHARED_GH_DIR/config.yml" ] && [ ! -f "$GH_DIR/config.yml" ]; then
+      cp "$SHARED_GH_DIR/config.yml" "$GH_DIR/config.yml"
     fi
     repaired=$((repaired + 1))
   fi
@@ -299,6 +311,8 @@ setup_claude_auth() {
 # Cloudflare authentication
 # Supports both API token and Wrangler OAuth
 setup_cloudflare_auth() {
+  local AUTH_DIR
+  AUTH_DIR="$(_get_project_auth_dir)"
   local CF_TOKEN_FILE="$AUTH_DIR/cloudflare_api_token"
   local WRANGLER_CONFIG_DIR="$AUTH_DIR/wrangler"
 
