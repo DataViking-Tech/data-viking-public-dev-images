@@ -140,7 +140,11 @@ RUN set -e && \
     tar xzf /tmp/codex.tar.gz -C /tmp && \
     mv /tmp/codex-${CODEX_ARCH}-unknown-linux-gnu /usr/local/bin/codex && \
     chmod +x /usr/local/bin/codex && \
-    rm /tmp/codex.tar.gz
+    rm /tmp/codex.tar.gz && \
+    # Amp CLI
+    curl -fsSL https://ampcode.com/install.sh | bash && \
+    mv /root/.amp/bin/amp /usr/local/bin/amp && \
+    chmod +x /usr/local/bin/amp
 
 # Install JS CLI tools via bun (single layer)
 RUN bun install -g wrangler@${WRANGLER_VERSION}
