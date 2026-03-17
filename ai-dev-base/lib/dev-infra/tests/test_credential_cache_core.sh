@@ -60,22 +60,27 @@ echo "========================================"
 echo "Testing Core Framework Functions"
 echo "========================================"
 
-# Test 1: get_workspace_root returns a valid path
+# Test 1: _get_project_auth_dir returns a valid path
 echo ""
-echo "Test 1: get_workspace_root returns valid path"
-WORKSPACE_ROOT=$(get_workspace_root)
-if [ -n "$WORKSPACE_ROOT" ] && [ -d "$WORKSPACE_ROOT" ]; then
-  assert_success "get_workspace_root returns valid directory"
+echo "Test 1: _get_project_auth_dir returns valid path"
+PROJECT_AUTH_DIR=$(_get_project_auth_dir)
+if [ -n "$PROJECT_AUTH_DIR" ]; then
+  assert_success "_get_project_auth_dir returns non-empty path"
 else
-  echo "✗ FAIL: get_workspace_root returns valid directory"
-  echo "  Returned: $WORKSPACE_ROOT"
+  echo "✗ FAIL: _get_project_auth_dir returns non-empty path"
+  echo "  Returned: $PROJECT_AUTH_DIR"
 fi
 
-# Test 2: AUTH_DIR is set correctly
+# Test 2: _get_state_dir returns a path under HOME
 echo ""
-echo "Test 2: AUTH_DIR is set correctly"
-EXPECTED_AUTH_DIR="${WORKSPACE_ROOT}/temp/auth"
-assert_equals "$EXPECTED_AUTH_DIR" "$AUTH_DIR" "AUTH_DIR matches expected path"
+echo "Test 2: _get_state_dir returns path under HOME"
+STATE_DIR=$(_get_state_dir)
+if [[ "$STATE_DIR" == "$HOME"* ]]; then
+  assert_success "_get_state_dir returns path under HOME"
+else
+  echo "✗ FAIL: _get_state_dir should return path under HOME"
+  echo "  Returned: $STATE_DIR"
+fi
 
 # Test 3: setup_credential_cache with no services (should succeed)
 echo ""
@@ -86,15 +91,16 @@ else
   echo "✗ FAIL: setup_credential_cache with no args should succeed"
 fi
 
-# Test 4: setup_credential_cache creates AUTH_DIR
+# Test 4: setup_credential_cache creates project auth dir
 echo ""
-echo "Test 4: setup_credential_cache creates AUTH_DIR"
-rm -rf "$AUTH_DIR"  # Clean first
+echo "Test 4: setup_credential_cache creates project auth dir"
+TEST_AUTH_DIR=$(_get_project_auth_dir)
+rm -rf "$TEST_AUTH_DIR" 2>/dev/null || true
 setup_credential_cache >/dev/null 2>&1
-if [ -d "$AUTH_DIR" ]; then
-  assert_success "setup_credential_cache creates AUTH_DIR"
+if [ -d "$TEST_AUTH_DIR" ]; then
+  assert_success "setup_credential_cache creates project auth dir"
 else
-  echo "✗ FAIL: setup_credential_cache should create AUTH_DIR"
+  echo "✗ FAIL: setup_credential_cache should create project auth dir"
 fi
 
 # Test 5: setup_credential_cache with unknown service (should warn but succeed)
@@ -352,7 +358,7 @@ fi
 rm -rf "$FAKE_SHARED" "$FAKE_GH_CONFIG"
 
 # Cleanup
-rm -rf "$AUTH_DIR"
+rm -rf "$(_get_project_auth_dir)" 2>/dev/null || true
 
 # Summary
 echo ""
