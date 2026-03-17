@@ -43,6 +43,7 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     sudo locales \
     ca-certificates gnupg2 openssh-client git curl wget make \
+    gcc g++ libicu-dev \
     tmux sqlite3 jq bash-completion procps unzip libicu72 postgresql-client && \
     # --- vscode user ---
     groupadd --gid 1000 vscode && \
@@ -96,6 +97,10 @@ ENV UV_PYTHON_INSTALL_DIR="/usr/local/share/uv/python"
 RUN uv python install 3.11 && \
     ln -sf $(uv python find 3.11) /usr/local/bin/python3 && \
     ln -sf $(uv python find 3.11) /usr/local/bin/python
+
+# Install Go runtime (needed for rebuilding gt/beads from source at runtime)
+COPY --from=beads-builder /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Install Beads binary (built from source in stage 1 with CGO_ENABLED=1)
 COPY --from=beads-builder /usr/local/bin/bd /usr/local/bin/bd
