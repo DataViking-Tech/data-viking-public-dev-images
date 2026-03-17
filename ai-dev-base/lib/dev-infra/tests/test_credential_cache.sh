@@ -105,18 +105,28 @@ echo "========================================"
 # Setup test environment with isolated workspace
 export TEST_DIR=$(mktemp -d)
 
-# Mock get_workspace_root to return test directory
-get_workspace_root() {
-  echo "$TEST_DIR"
-}
-export -f get_workspace_root
-
-# Now source the component (it will use our mocked get_workspace_root)
+# Now source the component
 source "$PROJECT_ROOT/components/credential_cache.sh"
+
+# Mock _get_project_auth_dir to return test directory
+_get_project_auth_dir() {
+  echo "$TEST_DIR/temp/auth"
+}
+
+# Mock _get_state_dir to return test directory
+_get_state_dir() {
+  echo "$TEST_DIR/state"
+}
+
+# Set AUTH_DIR for tests that reference it directly (cloudflare tests)
+AUTH_DIR="$TEST_DIR/temp/auth"
+
+# Point GH_CONFIG_DIR at test dir so setup_github_auth uses it
+export GH_CONFIG_DIR="$AUTH_DIR/gh-config"
 
 # Helper: clear sentinel to ensure each test runs the full auth check
 clear_gh_sentinel() {
-  rm -f "$AUTH_DIR/.gh-auth-checked"
+  rm -f "$(_get_state_dir)/gh-auth-checked"
 }
 
 # Test 1: Unknown service handling
@@ -407,7 +417,7 @@ github.com:
     git_protocol: https
 EOF
   setup_github_auth >/dev/null 2>&1
-  assert_file_exists "$AUTH_DIR/.gh-auth-checked" "Sentinel file created after first auth check"
+  assert_file_exists "$(_get_state_dir)/gh-auth-checked" "Sentinel file created after first auth check"
 
   # Second call with local creds still present: should return immediately (no output)
   OUTPUT=$(setup_github_auth 2>&1)
@@ -418,7 +428,7 @@ EOF
   fi
 
   # Cleanup
-  rm -f "$AUTH_DIR/.gh-auth-checked"
+  rm -f "$(_get_state_dir)/gh-auth-checked"
   rm -rf "$AUTH_DIR/gh-config"
 else
   echo "⊘ SKIP: Test 10 (gh CLI not installed)"
@@ -447,7 +457,7 @@ if command -v gh >/dev/null 2>&1; then
 
   # Cleanup
   unset -f gh
-  rm -f "$AUTH_DIR/.gh-auth-checked"
+  rm -f "$(_get_state_dir)/gh-auth-checked"
 else
   echo "⊘ SKIP: Test 11 (gh CLI not installed)"
 fi
@@ -480,7 +490,7 @@ if command -v gh >/dev/null 2>&1; then
 
   # Cleanup
   unset -f gh
-  rm -f "$AUTH_DIR/.gh-auth-checked"
+  rm -f "$(_get_state_dir)/gh-auth-checked"
 else
   echo "⊘ SKIP: Test 12 (gh CLI not installed)"
 fi
@@ -496,7 +506,7 @@ if command -v gh >/dev/null 2>&1; then
 
   # Create sentinel (simulates previous auth check)
   mkdir -p "$AUTH_DIR/gh-config"
-  touch "$AUTH_DIR/.gh-auth-checked"
+  touch "$(_get_state_dir)/gh-auth-checked"
 
   # Remove local hosts.yml (simulates empty GH_CONFIG_DIR)
   rm -f "$AUTH_DIR/gh-config/hosts.yml"
@@ -508,7 +518,7 @@ if command -v gh >/dev/null 2>&1; then
   # Override SHARED_GH_DIR for test by re-defining setup_github_auth with local scope
   # Instead, we use the verify_credential_propagation function with a temp dir
   # Replicate the defensive re-check logic inline
-  if [ -f "$AUTH_DIR/.gh-auth-checked" ] && [ ! -f "$AUTH_DIR/gh-config/hosts.yml" ] && [ -f "$FAKE_SHARED/hosts.yml" ]; then
+  if [ -f "$(_get_state_dir)/gh-auth-checked" ] && [ ! -f "$AUTH_DIR/gh-config/hosts.yml" ] && [ -f "$FAKE_SHARED/hosts.yml" ]; then
     cp "$FAKE_SHARED/hosts.yml" "$AUTH_DIR/gh-config/hosts.yml"
     chmod 600 "$AUTH_DIR/gh-config/hosts.yml"
   fi
@@ -522,7 +532,7 @@ if command -v gh >/dev/null 2>&1; then
 
   # Cleanup
   rm -rf "$FAKE_SHARED"
-  rm -f "$AUTH_DIR/.gh-auth-checked"
+  rm -f "$(_get_state_dir)/gh-auth-checked"
   rm -rf "$AUTH_DIR/gh-config"
 else
   echo "⊘ SKIP: Test 13 (gh CLI not installed)"

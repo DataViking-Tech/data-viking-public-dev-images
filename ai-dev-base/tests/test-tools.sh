@@ -159,22 +159,17 @@ echo "Testing Permissions"
 echo "========================================="
 echo ""
 
-# Test /workspaces exists and is owned by vscode
-echo -n "Testing /workspaces ownership... "
+# Test /workspaces exists and is accessible
+echo -n "Testing /workspaces exists... "
 if [ -d /workspaces ]; then
-    WS_OWNER=$(stat -c '%U:%G' /workspaces)
-    if [ "$WS_OWNER" = "vscode:vscode" ]; then
-        echo "✓ PASS"
-    else
-        echo "✗ FAIL (owned by $WS_OWNER, expected vscode:vscode)"
-        FAILURES=$((FAILURES + 1))
-    fi
+    echo "✓ PASS"
 else
     echo "✗ FAIL (/workspaces does not exist)"
     FAILURES=$((FAILURES + 1))
 fi
 
 # Test vscode can create directories in /workspaces
+# Note: on bind mounts, /workspaces may be root-owned; we test writeability not ownership
 echo -n "Testing vscode write access to /workspaces... "
 TEST_DIR="/workspaces/.permissions-test-$$"
 if [ "$(whoami)" = "vscode" ]; then
@@ -223,6 +218,15 @@ if [ -d /home/vscode/.claude ]; then
     fi
 else
     echo "- SKIP (directory missing)"
+fi
+
+# Test git safe.directory is configured
+echo -n "Testing git safe.directory... "
+if git config --system --get-all safe.directory 2>/dev/null | grep -q '\*'; then
+    echo "✓ PASS"
+else
+    echo "✗ FAIL (git safe.directory='*' not set in system config)"
+    FAILURES=$((FAILURES + 1))
 fi
 
 # Summary
