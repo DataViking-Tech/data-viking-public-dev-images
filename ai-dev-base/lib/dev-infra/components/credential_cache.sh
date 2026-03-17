@@ -68,9 +68,29 @@ setup_credential_cache() {
 # Caches OAuth credentials in temp/auth/gh-config/
 setup_github_auth() {
   export GH_CONFIG_DIR="$AUTH_DIR/gh-config"
-  local HOSTS_FILE="$GH_CONFIG_DIR/hosts.yml"
   local SENTINEL_FILE="$AUTH_DIR/.gh-auth-checked"
   local SHARED_GH_DIR="/home/vscode/.shared-auth/gh"
+  local FALLBACK_GH_DIR="$HOME/.config/gh"
+
+  # 9p/WSL2 workaround: if the auth dir exists but is inaccessible (root-owned
+  # on a 9p mount where chown/chmod are no-ops), copy credentials to a
+  # vscode-owned fallback and redirect GH_CONFIG_DIR there.
+  if [ -d "$GH_CONFIG_DIR" ] && [ ! -r "$GH_CONFIG_DIR" ]; then
+    _cred_log INFO "GH_CONFIG_DIR ($GH_CONFIG_DIR) not readable, falling back to $FALLBACK_GH_DIR"
+    mkdir -p "$FALLBACK_GH_DIR"
+    chmod 700 "$FALLBACK_GH_DIR"
+    # Copy existing credentials via sudo (they're readable by root)
+    for f in config.yml hosts.yml; do
+      if sudo test -f "$GH_CONFIG_DIR/$f"; then
+        sudo cp "$GH_CONFIG_DIR/$f" "$FALLBACK_GH_DIR/$f"
+        sudo chown "$(id -u):$(id -g)" "$FALLBACK_GH_DIR/$f"
+      fi
+    done
+    chmod 600 "$FALLBACK_GH_DIR/hosts.yml" 2>/dev/null || true
+    export GH_CONFIG_DIR="$FALLBACK_GH_DIR"
+  fi
+
+  local HOSTS_FILE="$GH_CONFIG_DIR/hosts.yml"
 
   # Fix Docker volume ownership: Docker creates named volumes as root:root
   if [ -d "$SHARED_GH_DIR" ] && [ ! -w "$SHARED_GH_DIR" ]; then
@@ -196,19 +216,28 @@ setup_github_auth() {
 # Call from postStartCommand or session startup to ensure credentials
 # are available. Re-imports from shared volume if local is empty.
 verify_credential_propagation() {
-  local HOSTS_FILE="$AUTH_DIR/gh-config/hosts.yml"
+  local GH_DIR="$AUTH_DIR/gh-config"
+  local FALLBACK_GH_DIR="$HOME/.config/gh"
   local SHARED_GH_DIR="/home/vscode/.shared-auth/gh"
   local repaired=0
+
+  # 9p/WSL2 workaround: if gh-config is root-owned and inaccessible, use fallback
+  if [ -d "$GH_DIR" ] && [ ! -r "$GH_DIR" ]; then
+    _cred_log INFO "verify: GH dir ($GH_DIR) not readable, using fallback $FALLBACK_GH_DIR"
+    GH_DIR="$FALLBACK_GH_DIR"
+  fi
+
+  local HOSTS_FILE="$GH_DIR/hosts.yml"
 
   # GitHub: re-import from shared if local is missing
   if [ ! -f "$HOSTS_FILE" ] && [ -d "$SHARED_GH_DIR" ] && [ -f "$SHARED_GH_DIR/hosts.yml" ]; then
     _cred_log INFO "verify: Re-importing gh credentials from shared volume"
-    mkdir -p "$AUTH_DIR/gh-config"
-    chmod 700 "$AUTH_DIR/gh-config"
+    mkdir -p "$GH_DIR"
+    chmod 700 "$GH_DIR" 2>/dev/null || true
     cp "$SHARED_GH_DIR/hosts.yml" "$HOSTS_FILE"
     chmod 600 "$HOSTS_FILE"
-    if [ -f "$SHARED_GH_DIR/config.yml" ] && [ ! -f "$AUTH_DIR/gh-config/config.yml" ]; then
-      cp "$SHARED_GH_DIR/config.yml" "$AUTH_DIR/gh-config/config.yml"
+    if [ -f "$SHARED_GH_DIR/config.yml" ] && [ ! -f "$GH_DIR/config.yml" ]; then
+      cp "$SHARED_GH_DIR/config.yml" "$GH_DIR/config.yml"
     fi
     repaired=$((repaired + 1))
   fi
