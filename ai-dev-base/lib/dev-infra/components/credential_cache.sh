@@ -68,9 +68,29 @@ setup_credential_cache() {
 # Caches OAuth credentials in temp/auth/gh-config/
 setup_github_auth() {
   export GH_CONFIG_DIR="$AUTH_DIR/gh-config"
-  local HOSTS_FILE="$GH_CONFIG_DIR/hosts.yml"
   local SENTINEL_FILE="$AUTH_DIR/.gh-auth-checked"
   local SHARED_GH_DIR="/home/vscode/.shared-auth/gh"
+  local FALLBACK_GH_DIR="$HOME/.config/gh"
+
+  # 9p/WSL2 workaround: if the auth dir exists but is inaccessible (root-owned
+  # on a 9p mount where chown/chmod are no-ops), copy credentials to a
+  # vscode-owned fallback and redirect GH_CONFIG_DIR there.
+  if [ -d "$GH_CONFIG_DIR" ] && [ ! -r "$GH_CONFIG_DIR" ]; then
+    _cred_log INFO "GH_CONFIG_DIR ($GH_CONFIG_DIR) not readable, falling back to $FALLBACK_GH_DIR"
+    mkdir -p "$FALLBACK_GH_DIR"
+    chmod 700 "$FALLBACK_GH_DIR"
+    # Copy existing credentials via sudo (they're readable by root)
+    for f in config.yml hosts.yml; do
+      if sudo test -f "$GH_CONFIG_DIR/$f"; then
+        sudo cp "$GH_CONFIG_DIR/$f" "$FALLBACK_GH_DIR/$f"
+        sudo chown "$(id -u):$(id -g)" "$FALLBACK_GH_DIR/$f"
+      fi
+    done
+    chmod 600 "$FALLBACK_GH_DIR/hosts.yml" 2>/dev/null || true
+    export GH_CONFIG_DIR="$FALLBACK_GH_DIR"
+  fi
+
+  local HOSTS_FILE="$GH_CONFIG_DIR/hosts.yml"
 
   # Fix Docker volume ownership: Docker creates named volumes as root:root
   if [ -d "$SHARED_GH_DIR" ] && [ ! -w "$SHARED_GH_DIR" ]; then
