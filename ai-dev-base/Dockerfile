@@ -33,6 +33,8 @@ FROM debian:bookworm-slim
 ARG GASTOWN_VERSION=0.12.0
 ARG DOLT_VERSION=1.83.5
 ARG CODEX_VERSION=0.114.0
+ARG UV_VERSION=0.7.12
+ARG BUN_VERSION=1.2.9
 ARG WRANGLER_VERSION=4.73.0
 
 # Create vscode user, set up locale, and install all system packages in a
@@ -89,7 +91,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv (Python package manager) to system-wide location
-RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh && \
+RUN curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | env UV_INSTALL_DIR="/usr/local/bin" sh && \
     chmod +x /usr/local/bin/uv /usr/local/bin/uvx
 
 # Install Python 3.11 via uv and symlink to /usr/local/bin for all users
@@ -121,7 +123,7 @@ RUN set -e && \
     chmod +x /usr/local/bin/dolt && \
     rm -rf /tmp/dolt.tar.gz /tmp/dolt-linux-${ARCH} && \
     # Bun
-    curl -fsSL https://bun.sh/install | bash && \
+    curl -fsSL https://bun.sh/install | BUN_VERSION="bun-v${BUN_VERSION}" bash && \
     # Claude Code
     GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" && \
     CC_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
