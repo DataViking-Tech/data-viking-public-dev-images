@@ -119,6 +119,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Retag current edge as edge-previous
+        continue-on-error: true
+        run: |
+          # Preserve the current :edge manifest as :edge-previous for rollback.
+          # Fails gracefully on first-ever build when no :edge exists yet.
+          docker buildx imagetools create \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge-previous \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
+
       - name: Create multi-arch manifest
         run: |
           AMD64_DIGEST=$(cat /tmp/digests/amd64)
@@ -140,6 +149,7 @@ jobs:
           echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge-previous\`" >> $GITHUB_STEP_SUMMARY
 
   trigger-downstream:
     needs: merge
