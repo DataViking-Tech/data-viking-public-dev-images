@@ -51,6 +51,14 @@ jobs:
       - name: Validate devcontainer metadata
         run: ./ai-dev-base/tests/validate-metadata.sh ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.31.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
       - name: Export ai-dev-base image for downstream jobs
         run: docker save ghcr.io/dataviking-tech/ai-dev-base:edge -o /tmp/ai-dev-base.tar
 
@@ -93,6 +101,14 @@ jobs:
           docker run --rm dbt-postgres-pr:${{ github.event.pull_request.number }} \
             /usr/local/bin/validate-tools.sh
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.31.0
+        with:
+          image-ref: dbt-postgres-pr:${{ github.event.pull_request.number }}
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
   build-godot-game-dev:
     needs: build-and-test
     runs-on: ubuntu-latest
@@ -127,6 +143,14 @@ jobs:
 
       - name: Validate devcontainer metadata
         run: ./godot-game-dev/tests/validate-metadata.sh godot-game-dev-pr:${{ github.event.pull_request.number }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.31.0
+        with:
+          image-ref: godot-game-dev-pr:${{ github.event.pull_request.number }}
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
 
   # Validate arm64 build on native runner (no QEMU)
   validate-arm64:

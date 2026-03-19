@@ -71,6 +71,14 @@ jobs:
           docker run --rm --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge \
             /usr/local/bin/validate-tools.sh
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.31.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
       - name: Image summary
         run: |
           echo "### dbt-postgres Edge Image Published" >> $GITHUB_STEP_SUMMARY

@@ -103,6 +103,14 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }} \
             /usr/local/bin/test-tools.sh
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.31.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
       - name: Save digest
         run: |
           mkdir -p /tmp/digests
