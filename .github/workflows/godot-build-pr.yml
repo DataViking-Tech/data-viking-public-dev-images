@@ -59,6 +59,15 @@ jobs:
         if: steps.base-changes.outputs.base != 'true'
         run: ./godot-game-dev/tests/validate-metadata.sh ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
 
+      - name: Run Trivy vulnerability scanner
+        if: steps.base-changes.outputs.base != 'true'
+        uses: aquasecurity/trivy-action@v0.31.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
   validate-arm64:
     runs-on: ubuntu-latest
     permissions:
