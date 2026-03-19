@@ -151,6 +151,17 @@ jobs:
           format: 'table'
           exit-code: '0'
           severity: 'CRITICAL,HIGH'
+  notify-failure:
+    needs: [build-and-test, build-dbt-postgres, build-godot-game-dev, validate-arm64]
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/slack-notify-build-failure
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          image-name: ai-dev-base (PR)
 
   # Validate arm64 build on native runner (no QEMU)
   validate-arm64:

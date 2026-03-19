@@ -1,0 +1,67 @@
+name: 'Slack Build Failure Notification'
+description: 'Send a Slack notification when a build or test workflow fails'
+
+inputs:
+  webhook-url:
+    description: 'Slack webhook URL'
+    required: true
+  image-name:
+    description: 'Name of the image or component that failed (e.g. ai-dev-base)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Send Slack notification
+      if: ${{ inputs.webhook-url != '' }}
+      shell: bash
+      env:
+        SLACK_WEBHOOK_URL: ${{ inputs.webhook-url }}
+        IMAGE_NAME: ${{ inputs.image-name }}
+        WORKFLOW_NAME: ${{ github.workflow }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        REF: ${{ github.ref_name }}
+        SHA: ${{ github.sha }}
+        ACTOR: ${{ github.actor }}
+        EVENT: ${{ github.event_name }}
+      run: |
+        SHORT_SHA="${SHA:0:7}"
+        PAYLOAD=$(cat <<EOJSON
+        {
+          "blocks": [
+            {
+              "type": "header",
+              "text": {
+                "type": "plain_text",
+                "text": "Build Failed: ${IMAGE_NAME}",
+                "emoji": true
+              }
+            },
+            {
+              "type": "section",
+              "fields": [
+                { "type": "mrkdwn", "text": "*Workflow:*\n${WORKFLOW_NAME}" },
+                { "type": "mrkdwn", "text": "*Trigger:*\n${EVENT}" },
+                { "type": "mrkdwn", "text": "*Branch/Tag:*\n\`${REF}\`" },
+                { "type": "mrkdwn", "text": "*Commit:*\n\`${SHORT_SHA}\`" },
+                { "type": "mrkdwn", "text": "*Actor:*\n${ACTOR}" }
+              ]
+            },
+            {
+              "type": "actions",
+              "elements": [
+                {
+                  "type": "button",
+                  "text": { "type": "plain_text", "text": "View Run" },
+                  "url": "${RUN_URL}",
+                  "style": "danger"
+                }
+              ]
+            }
+          ]
+        }
+        EOJSON
+        )
+        curl -sfS -X POST -H 'Content-type: application/json' \
+          --data "${PAYLOAD}" \
+          "${SLACK_WEBHOOK_URL}"

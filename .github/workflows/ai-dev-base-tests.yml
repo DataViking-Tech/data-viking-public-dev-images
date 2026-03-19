@@ -50,3 +50,15 @@ jobs:
 
       - name: Run directories tests
         run: bash ai-dev-base/lib/dev-infra/tests/test_directories.sh
+
+  notify-failure:
+    needs: [python-tests, bash-tests]
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/slack-notify-build-failure
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          image-name: ai-dev-base (tests)

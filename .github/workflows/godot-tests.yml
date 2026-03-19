@@ -32,3 +32,15 @@ jobs:
         env:
           PYTHONPATH: godot-game-dev/lib/render-bridges
         run: python -m unittest discover -s godot-game-dev/lib/render-bridges/tests -p "test_*.py" -v
+
+  notify-failure:
+    needs: [python-tests]
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/slack-notify-build-failure
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          image-name: godot-game-dev (tests)

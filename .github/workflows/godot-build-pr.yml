@@ -104,3 +104,15 @@ jobs:
           cache-to: type=gha,mode=max,scope=godot-game-dev-arm64
           provenance: false
           sbom: false
+
+  notify-failure:
+    needs: [build-and-test, validate-arm64]
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/slack-notify-build-failure
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          image-name: godot-game-dev (PR)
