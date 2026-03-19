@@ -26,7 +26,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r godot-game-dev/.devcontainer/requirements.txt
+        run: pip install --retries 3 -r godot-game-dev/.devcontainer/requirements.txt
 
       - name: Run render-bridges contract tests
         env:

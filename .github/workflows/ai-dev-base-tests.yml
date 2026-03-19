@@ -26,7 +26,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests pyyaml watchdog python-dotenv
+        run: pip install --retries 3 requests pyyaml watchdog python-dotenv
 
       - name: Run ai-coding-utils tests
         env:

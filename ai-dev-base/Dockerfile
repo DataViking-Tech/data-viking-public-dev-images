@@ -10,7 +10,9 @@ FROM golang:1.26-bookworm AS beads-builder
 ARG BEADS_VERSION=0.60.0
 RUN apt-get update && apt-get install -y --no-install-recommends git gcc g++ libicu-dev && \
     rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch v${BEADS_VERSION} https://github.com/steveyegge/beads.git /src/beads
+RUN git clone --depth 1 --branch v${BEADS_VERSION} https://github.com/steveyegge/beads.git /src/beads || \
+    (sleep 2 && git clone --depth 1 --branch v${BEADS_VERSION} https://github.com/steveyegge/beads.git /src/beads) || \
+    (sleep 5 && git clone --depth 1 --branch v${BEADS_VERSION} https://github.com/steveyegge/beads.git /src/beads)
 WORKDIR /src/beads
 # Cache module downloads in their own layer (changes rarely)
 RUN go mod download
@@ -67,16 +69,19 @@ RUN ARCH=$(dpkg --print-architecture) && \
     # which adds a repo + runs apt-get update redundantly)
     NODE_VERSION=20.20.0 && \
     NODE_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
-    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" \
       | tar xz --strip-components=1 -C /usr/local && \
     # GitHub CLI
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      https://cli.github.com/packages/githubcli-archive-keyring.gpg \
       -o /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
     chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
     echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
       > /etc/apt/sources.list.d/github-cli.list && \
     # Docker CLI
-    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
     echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
       > /etc/apt/sources.list.d/docker.list && \
     # Doppler CLI
@@ -92,7 +97,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv (Python package manager) to system-wide location
-RUN curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | env UV_INSTALL_DIR="/usr/local/bin" sh && \
+RUN curl -LsSf --retry 3 --retry-delay 2 --retry-all-errors "https://astral.sh/uv/${UV_VERSION}/install.sh" | env UV_INSTALL_DIR="/usr/local/bin" sh && \
     chmod +x /usr/local/bin/uv /usr/local/bin/uvx
 
 # Install Python 3.11 via uv and symlink to /usr/local/bin for all users
@@ -113,39 +118,39 @@ ENV BUN_INSTALL="/usr/local"
 RUN set -e && \
     # Gastown
     ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
-    wget -q "https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/gastown.tar.gz && \
+    wget -q --tries=3 --waitretry=2 "https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/gastown.tar.gz && \
     tar xzf /tmp/gastown.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/gt && \
     rm /tmp/gastown.tar.gz && \
     # Dolt (SQL server managed by gt for multi-agent beads access)
-    wget -q "https://github.com/dolthub/dolt/releases/download/v${DOLT_VERSION}/dolt-linux-${ARCH}.tar.gz" -O /tmp/dolt.tar.gz && \
+    wget -q --tries=3 --waitretry=2 "https://github.com/dolthub/dolt/releases/download/v${DOLT_VERSION}/dolt-linux-${ARCH}.tar.gz" -O /tmp/dolt.tar.gz && \
     tar xzf /tmp/dolt.tar.gz -C /tmp && \
     mv /tmp/dolt-linux-${ARCH}/bin/dolt /usr/local/bin/dolt && \
     chmod +x /usr/local/bin/dolt && \
     rm -rf /tmp/dolt.tar.gz /tmp/dolt-linux-${ARCH} && \
     # Bun
-    curl -fsSL https://bun.sh/install | BUN_VERSION="bun-v${BUN_VERSION}" bash && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors https://bun.sh/install | BUN_VERSION="bun-v${BUN_VERSION}" bash && \
     # Claude Code
     GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" && \
     CC_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
     PLATFORM="linux-${CC_ARCH}" && \
     VERSION="${CLAUDE_CODE_VERSION}" && \
-    MANIFEST=$(curl -fsSL "$GCS_BUCKET/$VERSION/manifest.json") && \
+    MANIFEST=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors "$GCS_BUCKET/$VERSION/manifest.json") && \
     CHECKSUM=$(echo "$MANIFEST" | jq -r ".platforms[\"$PLATFORM\"].checksum") && \
-    curl -fsSL -o /tmp/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude" && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude" && \
     echo "$CHECKSUM  /tmp/claude" | sha256sum -c - && \
     mv /tmp/claude /usr/local/bin/claude && \
     chmod +x /usr/local/bin/claude && \
     # Codex CLI
     CODEX_ARCH=$(uname -m) && \
-    curl -fsSL -o /tmp/codex.tar.gz \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/codex.tar.gz \
       "https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-${CODEX_ARCH}-unknown-linux-gnu.tar.gz" && \
     tar xzf /tmp/codex.tar.gz -C /tmp && \
     mv /tmp/codex-${CODEX_ARCH}-unknown-linux-gnu /usr/local/bin/codex && \
     chmod +x /usr/local/bin/codex && \
     rm /tmp/codex.tar.gz && \
     # Amp CLI
-    curl -fsSL https://ampcode.com/install.sh | bash && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors https://ampcode.com/install.sh | bash && \
     mv /root/.amp/bin/amp /usr/local/bin/amp && \
     chmod +x /usr/local/bin/amp
 
