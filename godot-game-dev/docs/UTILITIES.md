@@ -5,7 +5,7 @@
 
 | Tool       | Description                                          |
 |------------|------------------------------------------------------|
-| `godot`    | Godot 4.5 — open-source game engine (headless CLI)  |
+| `godot`    | Godot 4.6 — open-source game engine (headless CLI)  |
 | `xvfb-run` | Virtual framebuffer for headless rendering          |
 | `ffmpeg`   | Multimedia encoding, decoding, and streaming         |
 

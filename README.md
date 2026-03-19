@@ -7,7 +7,7 @@ Public dev container images built and managed in a single monorepo.
 | Image | Description | Registry |
 |-------|-------------|----------|
 | [ai-dev-base](ai-dev-base/) | Foundation image: Python 3.11, Node.js, Claude CLI, Beads, Gas Town, dev-infra | `ghcr.io/dataviking-tech/ai-dev-base` |
-| [godot-game-dev](godot-game-dev/) | Godot 4.5.1 game development environment | `ghcr.io/dataviking-tech/godot-game-dev-image` |
+| [godot-game-dev](godot-game-dev/) | Godot 4.6.1 game development environment | `ghcr.io/dataviking-tech/godot-game-dev-image` |
 | [dbt-postgres](dbt-postgres/) | dbt-core + dbt-postgres data engineering environment | `ghcr.io/dataviking-tech/dbt-postgres` |
 
 ## Architecture

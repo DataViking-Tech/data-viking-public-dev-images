@@ -60,7 +60,7 @@ This guide helps you upgrade between different versions of the Godot Game Develo
 4. Validate:
    ```bash
    cat /opt/image-version  # Should show v1.0.0
-   godot --version         # Should show 4.5.1
+   godot --version         # Should show 4.6.1
    python3 --version       # Should show 3.11.x
    bun --version           # Should show 1.1.38
    ```

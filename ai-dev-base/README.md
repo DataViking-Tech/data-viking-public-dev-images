@@ -36,8 +36,8 @@ Docker and Podman without aliases.
 
 This image includes:
 - Claude CLI: latest
-- Beads: 0.49.3
-- Gas Town (gt): 0.5.0
+- Beads: 0.60.0
+- Gas Town (gt): 0.12.0
 - ai-coding-utils (embedded from `lib/ai-coding-utils/`)
 - dev-infra (embedded from `lib/dev-infra/`)
 

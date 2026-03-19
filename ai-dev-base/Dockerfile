@@ -4,7 +4,7 @@
 # The beads release binaries are built with the gms_pure_go tag on arm64,
 # which disables CGO and breaks the embedded Dolt database engine.
 # Building from source ensures CGO is enabled on all architectures.
-# See: https://github.com/steveyegge/beads/issues/XXX
+# See: https://github.com/steveyegge/beads/pull/1 (arm64 CGO fix)
 ###############################################################################
 FROM golang:1.26-bookworm AS beads-builder
 ARG BEADS_VERSION=0.60.0
