@@ -35,6 +35,12 @@ Tags are created automatically on PR merge based on semver labels:
 | `semver:major` | Breaking changes |
 | `semver:skip` | No release |
 
+## Edge Rollback
+
+Every edge build preserves the previous `:edge` image as `:edge-previous` before publishing the new one. If a nightly build introduces a regression, switch to `:edge-previous` for an immediate rollback.
+
+See [docs/EDGE-ROLLBACK-RUNBOOK.md](docs/EDGE-ROLLBACK-RUNBOOK.md) for the full rollback procedure.
+
 ## CI Isolation
 
 Workflows are scoped by path filters. A PR touching only `dbt-postgres/` will NOT trigger godot or ai-dev-base workflows.
