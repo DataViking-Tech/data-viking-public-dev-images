@@ -12,163 +12,20 @@ on:
         type: string
   workflow_dispatch:
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: dataviking-tech/ai-dev-base
-
 jobs:
-  # Extract version info (shared by build jobs)
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.VERSION }}
-      major: ${{ steps.version.outputs.MAJOR }}
-      minor: ${{ steps.version.outputs.MINOR }}
-    steps:
-      - name: Extract and validate version from tag
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=manual" >> $GITHUB_OUTPUT
-            echo "MAJOR=" >> $GITHUB_OUTPUT
-            echo "MINOR=" >> $GITHUB_OUTPUT
-          else
-            if [ -n "${{ inputs.tag }}" ]; then
-              RAW_TAG="${{ inputs.tag }}"
-            else
-              RAW_TAG=${GITHUB_REF#refs/tags/}
-            fi
-            TAG="${RAW_TAG#ai-dev-base/}"
-            if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-              echo "Error: Tag must match semantic version format (vX.Y.Z), got: $TAG"
-              exit 1
-            fi
-            echo "VERSION=${TAG}" >> $GITHUB_OUTPUT
-            VERSION_NUMS=${TAG#v}
-            MAJOR=$(echo $VERSION_NUMS | cut -d. -f1)
-            MINOR=$(echo $VERSION_NUMS | cut -d. -f1-2)
-            echo "MAJOR=v${MAJOR}" >> $GITHUB_OUTPUT
-            echo "MINOR=v${MINOR}" >> $GITHUB_OUTPUT
-          fi
-
-  # Build each architecture on its native runner (no QEMU emulation)
-  build:
-    needs: version
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-latest
-            arch: amd64
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
-            arch: arm64
-    runs-on: ${{ matrix.runner }}
+  release:
+    uses: ./.github/workflows/_build-release.yml
+    with:
+      tag: ${{ inputs.tag || '' }}
+      image_name: dataviking-tech/ai-dev-base
+      tag_prefix: ai-dev-base
+      context_dir: ai-dev-base
+      test_script: /usr/local/bin/test-tools.sh
+      cache_scope: ai-dev-base
+      build_strategy: native
+      validate_metadata_script: ./ai-dev-base/tests/validate-metadata.sh
+      summary_title: "ai-dev-base Release Image Published"
+    secrets: inherit
     permissions:
       contents: read
       packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push (single platform)
-        id: build
-        uses: docker/build-push-action@v7
-        with:
-          context: ai-dev-base
-          platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=ai-dev-base-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=ai-dev-base-${{ matrix.arch }}
-          provenance: false
-          sbom: false
-
-      - name: Test image
-        run: |
-          docker run --rm \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }} \
-            /usr/local/bin/test-tools.sh
-
-      - name: Save digest
-        run: |
-          mkdir -p /tmp/digests
-          echo "${{ steps.build.outputs.digest }}" > /tmp/digests/${{ matrix.arch }}
-
-      - name: Upload digest
-        uses: actions/upload-artifact@v7
-        with:
-          name: digest-${{ matrix.arch }}
-          path: /tmp/digests/${{ matrix.arch }}
-          retention-days: 1
-
-  # Merge per-arch images into a single multi-arch manifest with version tags
-  merge:
-    needs: [version, build]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Download digests
-        uses: actions/download-artifact@v8
-        with:
-          pattern: digest-*
-          path: /tmp/digests
-          merge-multiple: true
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create multi-arch manifest
-        run: |
-          AMD64_DIGEST=$(cat /tmp/digests/amd64)
-          ARM64_DIGEST=$(cat /tmp/digests/arm64)
-          TAGS=("--tag" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}")
-          if [ -n "${{ needs.version.outputs.minor }}" ]; then
-            TAGS+=("--tag" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.minor }}")
-            TAGS+=("--tag" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.major }}")
-          fi
-          docker buildx imagetools create \
-            "${TAGS[@]}" \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${AMD64_DIGEST} \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${ARM64_DIGEST}
-
-      - name: Validate devcontainer metadata
-        if: needs.version.outputs.version != 'manual'
-        run: ./ai-dev-base/tests/validate-metadata.sh ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
-
-      - name: Image summary
-        if: needs.version.outputs.version != 'manual'
-        run: |
-          echo "### ai-dev-base Release Image Published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ needs.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}\` (immutable)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.minor }}\` (tracks patch)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.major }}\` (tracks minor)" >> $GITHUB_STEP_SUMMARY

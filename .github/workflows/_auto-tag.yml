@@ -1,0 +1,143 @@
+name: "Reusable: Auto Semver Tag"
+
+on:
+  workflow_call:
+    inputs:
+      image_dir:
+        description: 'Directory containing the image (e.g. ai-dev-base)'
+        required: true
+        type: string
+      tag_prefix:
+        description: 'Tag prefix for semver (e.g. ai-dev-base). Defaults to image_dir.'
+        required: false
+        type: string
+        default: ''
+    outputs:
+      tag:
+        description: 'The created semver tag (e.g. ai-dev-base/v1.2.3)'
+        value: ${{ jobs.auto-tag.outputs.tag }}
+      skipped:
+        description: 'Whether tagging was skipped'
+        value: ${{ jobs.auto-tag.outputs.skipped }}
+
+jobs:
+  auto-tag:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+      skipped: ${{ steps.check.outputs.skipped }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check if image directory changed
+        id: changes
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            image:
+              - '${{ inputs.image_dir }}/**'
+
+      - name: Parse semver labels and check scope
+        id: check
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          IMAGE_CHANGED: ${{ steps.changes.outputs.image }}
+          IMAGE_DIR: ${{ inputs.image_dir }}
+        run: |
+          if [ "$IMAGE_CHANGED" != "true" ]; then
+            echo "No ${IMAGE_DIR} changes — skipping"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          SEMVER_LABELS=$(echo "$LABELS" | jq -r '.[] | select(startswith("semver:"))' | grep -v '^semver:skip$' || true)
+          SKIP=$(echo "$LABELS" | jq -r '.[] | select(. == "semver:skip")' || true)
+
+          if [ -n "$SKIP" ]; then
+            echo "semver:skip label found — skipping release"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          COUNT=$(echo "$SEMVER_LABELS" | grep -c . || true)
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No semver label found — skipping release"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$COUNT" -gt 1 ]; then
+            echo "::error::Multiple semver labels found: $(echo $SEMVER_LABELS | tr '\n' ', '). Use exactly one."
+            exit 1
+          fi
+
+          BUMP="${SEMVER_LABELS#semver:}"
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+          echo "Bump type: $BUMP"
+
+      - name: Compute next version
+        if: steps.check.outputs.skipped != 'true'
+        id: bump
+        env:
+          BUMP: ${{ steps.check.outputs.bump }}
+          TAG_PREFIX: ${{ inputs.tag_prefix || inputs.image_dir }}
+        run: |
+          # Find latest tag for this image
+          LATEST=$(git tag --list "${TAG_PREFIX}/v*.*.*" --sort=-v:refname | head -n 1)
+
+          if [ -z "$LATEST" ]; then
+            LATEST="${TAG_PREFIX}/v0.0.0"
+            echo "No existing tags found — starting from v0.0.0"
+          fi
+          echo "Latest tag: $LATEST"
+
+          # Strip prefix to get bare version
+          VERSION="${LATEST#${TAG_PREFIX}/v}"
+          MAJOR="${VERSION%%.*}"
+          REST="${VERSION#*.}"
+          MINOR="${REST%%.*}"
+          PATCH="${REST#*.}"
+
+          case "$BUMP" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+            *)
+              echo "::error::Unknown bump type: $BUMP"
+              exit 1
+              ;;
+          esac
+
+          NEW_TAG="${TAG_PREFIX}/v${MAJOR}.${MINOR}.${PATCH}"
+          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "New tag: $NEW_TAG"
+
+      - name: Create and push tag
+        if: steps.check.outputs.skipped != 'true'
+        env:
+          NEW_TAG: ${{ steps.bump.outputs.tag }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$NEW_TAG" -m "Release $NEW_TAG (PR #${PR_NUMBER}: ${PR_TITLE})"
+          git push origin "$NEW_TAG"
