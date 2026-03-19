@@ -247,5 +247,6 @@ LABEL devcontainer.metadata='[{ \
   "postStartCommand": "dev-services start" \
 }]'
 
+USER vscode
 WORKDIR /workspaces
 CMD ["/bin/bash"]
