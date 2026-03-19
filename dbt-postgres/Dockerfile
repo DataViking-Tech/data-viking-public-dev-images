@@ -19,8 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install dbt via uv into the uv-managed Python (not Debian system Python)
 # Scripts land in the uv Python's bin dir, so we symlink dbt into /usr/local/bin
 RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 \
-    dbt-core \
-    dbt-postgres \
+    dbt-core==1.11.7 \
+    dbt-postgres==1.10.0 \
     && ln -sf "$(dirname "$(readlink -f /usr/local/bin/python3)")/dbt" /usr/local/bin/dbt
 
 # Copy and run validation script
