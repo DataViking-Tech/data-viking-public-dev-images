@@ -16,7 +16,7 @@ USER root
 
 # Install Godot system dependencies
 # (ai-dev-base provides: git, curl, wget, python3, build-essential)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     # Godot runtime dependencies
     libx11-6 libxcursor1 libxinerama1 libxrandr2 libgl1 \
     libegl1 libgles2 libglx0 \
@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y \
 # Install Godot (arch-aware: x86_64 / arm64)
 RUN GODOT_ARCH=$(uname -m | sed 's/aarch64/arm64/') && \
     echo "Installing Godot ${GODOT_VERSION} (${GODOT_ARCH})..." \
-    && wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" \
+    && wget -q --tries=3 --waitretry=2 "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" \
     && unzip -q "Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" -d /opt \
     && mv "/opt/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}" /opt/godot \
     && chmod +x /opt/godot \
@@ -57,8 +57,8 @@ COPY lib/render-bridges/render_bridge /opt/render-bridges/render_bridge
 COPY lib/render-bridges/godot_render_bridge.py /opt/render-bridges/godot_render_bridge.py
 COPY lib/render-bridges/render_bridge_integration.py /opt/render-bridges/render_bridge_integration.py
 COPY lib/render-bridges/scripts /opt/render-bridges/scripts
-RUN mkdir -p /workspace/temp/render-queue /workspace/temp/render-output \
-    && chmod 777 /workspace/temp/render-queue /workspace/temp/render-output
+RUN mkdir -p /workspaces/temp/render-queue /workspaces/temp/render-output \
+    && chmod 777 /workspaces/temp/render-queue /workspaces/temp/render-output
 
 # Make render-bridges importable as a Python module
 ENV PYTHONPATH="/opt/render-bridges:${PYTHONPATH}"
@@ -100,7 +100,7 @@ RUN /usr/local/bin/validate-tools.sh
 USER root
 
 # Set working directory
-WORKDIR /workspace
+WORKDIR /workspaces
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

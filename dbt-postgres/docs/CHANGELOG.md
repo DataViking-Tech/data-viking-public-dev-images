@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v1.0.0] - Unreleased
 
+### Changed
+- Pin dbt-core==1.11.7 and dbt-postgres==1.10.0 for reproducible builds
+
 ### Added
 - Initial release of dbt-postgres devcontainer image
 - dbt-core and dbt-postgres installed via uv

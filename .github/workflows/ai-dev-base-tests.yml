@@ -18,15 +18,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests pyyaml watchdog python-dotenv
+        run: pip install --retries 3 requests pyyaml watchdog python-dotenv
 
       - name: Run ai-coding-utils tests
         env:
@@ -43,10 +43,22 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Run credential cache tests
         run: bash ai-dev-base/lib/dev-infra/tests/test_credential_cache_core.sh
 
       - name: Run directories tests
         run: bash ai-dev-base/lib/dev-infra/tests/test_directories.sh
+
+  notify-failure:
+    needs: [python-tests, bash-tests]
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/slack-notify-build-failure
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          image-name: ai-dev-base (tests)

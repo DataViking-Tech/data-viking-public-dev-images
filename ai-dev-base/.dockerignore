@@ -1,0 +1,18 @@
+# Documentation (not needed in build context)
+README.md
+AGENTS.md
+
+# CI/CD and repo metadata
+.github/
+.git/
+.gitignore
+.gitattributes
+
+# Local development artifacts
+.claude/
+.beads/
+.logs/
+.runtime/
+__pycache__/
+temp/
+state.json

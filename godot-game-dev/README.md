@@ -4,7 +4,7 @@ Custom devcontainer image with pre-installed game development tools for fast con
 
 ## 🚀 Features
 
-- **Godot 4.5.1** - Game engine with all dependencies
+- **Godot 4.6.1** - Game engine with all dependencies
 - **Python 3.11 + uv** - Package management
 - **Bun** - Fast JavaScript runtime
 - **Claude CLI** - AI coding assistant

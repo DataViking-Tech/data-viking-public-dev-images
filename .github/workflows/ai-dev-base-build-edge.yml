@@ -40,13 +40,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -54,7 +54,7 @@ jobs:
 
       - name: Build and push (single platform)
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           context: ai-dev-base
           platforms: ${{ matrix.platform }}
@@ -70,13 +70,21 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }} \
             /usr/local/bin/test-tools.sh
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
       - name: Save digest
         run: |
           mkdir -p /tmp/digests
           echo "${{ steps.build.outputs.digest }}" > /tmp/digests/${{ matrix.arch }}
 
       - name: Upload digest
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: digest-${{ matrix.arch }}
           path: /tmp/digests/${{ matrix.arch }}
@@ -92,24 +100,33 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Download digests
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: digest-*
           path: /tmp/digests
           merge-multiple: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag current edge as edge-previous
+        continue-on-error: true
+        run: |
+          # Preserve the current :edge manifest as :edge-previous for rollback.
+          # Fails gracefully on first-ever build when no :edge exists yet.
+          docker buildx imagetools create \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge-previous \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge
 
       - name: Create multi-arch manifest
         run: |
@@ -132,23 +149,73 @@ jobs:
           echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge-previous\`" >> $GITHUB_STEP_SUMMARY
+
+  notify-failure:
+    needs: [build, merge]
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/slack-notify-build-failure
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          image-name: ai-dev-base (edge)
+          echo "" >> $GITHUB_STEP_SUMMARY
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge"
+          MANIFEST_INDEX=$(docker buildx imagetools inspect --raw "$IMAGE_REF")
+          echo "**Image Size (compressed):**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "$MANIFEST_INDEX" | jq -r '
+            .manifests[] | select(.platform.os == "linux") |
+            "\(.platform.architecture) \(.digest)"
+          ' | while IFS=' ' read -r ARCH DIGEST; do
+            PLAT_RAW=$(docker buildx imagetools inspect --raw "${IMAGE_REF}@${DIGEST}")
+            LAYER_BYTES=$(echo "$PLAT_RAW" | jq '[.layers[].size] | add')
+            CONFIG_BYTES=$(echo "$PLAT_RAW" | jq '.config.size')
+            TOTAL_BYTES=$((LAYER_BYTES + CONFIG_BYTES))
+            if [ "$TOTAL_BYTES" -ge 1073741824 ]; then
+              SIZE=$(echo "scale=2; $TOTAL_BYTES / 1073741824" | bc)
+              echo "| linux/${ARCH} | ${SIZE} GB |" >> $GITHUB_STEP_SUMMARY
+            else
+              SIZE=$(echo "scale=1; $TOTAL_BYTES / 1048576" | bc)
+              echo "| linux/${ARCH} | ${SIZE} MB |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
 
   trigger-downstream:
     needs: merge
     runs-on: ubuntu-latest
     permissions:
       actions: write
+    outputs:
+      run_ids: ${{ steps.dispatch.outputs.run_ids }}
 
     steps:
       - name: Trigger downstream edge rebuilds
-        uses: actions/github-script@v8
+        id: dispatch
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const workflows = [
               'godot-build-edge.yml',
               'dbt-build-edge.yml'
             ];
+            const runIds = {};
+
             for (const workflow of workflows) {
+              // Record runs before dispatch to find the new one
+              const before = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflow,
+                per_page: 1
+              });
+              const latestBefore = before.data.workflow_runs[0]?.id || 0;
+
               console.log(`Dispatching ${workflow}...`);
               await github.rest.actions.createWorkflowDispatch({
                 owner: context.repo.owner,
@@ -157,4 +224,127 @@ jobs:
                 ref: 'main'
               });
               console.log(`Dispatched ${workflow}`);
+
+              // Poll for the new run to appear (up to 60s)
+              let runId = null;
+              for (let i = 0; i < 12; i++) {
+                await new Promise(r => setTimeout(r, 5000));
+                const after = await github.rest.actions.listWorkflowRuns({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: workflow,
+                  per_page: 5
+                });
+                const newRun = after.data.workflow_runs.find(
+                  r => r.id > latestBefore && r.event === 'workflow_dispatch'
+                );
+                if (newRun) {
+                  runId = newRun.id;
+                  break;
+                }
+              }
+
+              if (runId) {
+                runIds[workflow] = runId;
+                console.log(`Found run ${runId} for ${workflow}`);
+              } else {
+                console.log(`Warning: could not find run ID for ${workflow}`);
+              }
             }
+
+            core.setOutput('run_ids', JSON.stringify(runIds));
+
+  verify-downstream:
+    needs: trigger-downstream
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+
+    steps:
+      - name: Wait for downstream builds to complete
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const runIds = JSON.parse('${{ needs.trigger-downstream.outputs.run_ids }}');
+            const entries = Object.entries(runIds);
+
+            if (entries.length === 0) {
+              core.warning('No downstream run IDs captured — skipping verification');
+              return;
+            }
+
+            const maxWait = 30 * 60 * 1000; // 30 minutes
+            const pollInterval = 30 * 1000;  // 30 seconds
+            const start = Date.now();
+
+            const pending = new Map(entries);
+            const results = {};
+
+            while (pending.size > 0) {
+              if (Date.now() - start > maxWait) {
+                const timedOut = [...pending.keys()].join(', ');
+                core.setFailed(`Timed out waiting for downstream builds: ${timedOut}`);
+                return;
+              }
+
+              for (const [workflow, runId] of [...pending.entries()]) {
+                const { data: run } = await github.rest.actions.getWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: runId
+                });
+
+                if (run.status === 'completed') {
+                  results[workflow] = run.conclusion;
+                  pending.delete(workflow);
+                  console.log(`${workflow} (run ${runId}): ${run.conclusion}`);
+                }
+              }
+
+              if (pending.size > 0) {
+                const elapsed = Math.round((Date.now() - start) / 1000);
+                console.log(`Waiting... ${pending.size} build(s) still running (${elapsed}s elapsed)`);
+                await new Promise(r => setTimeout(r, pollInterval));
+              }
+            }
+
+            // Check results
+            const failures = Object.entries(results)
+              .filter(([, conclusion]) => conclusion !== 'success')
+              .map(([workflow, conclusion]) => `${workflow}: ${conclusion}`);
+
+            if (failures.length > 0) {
+              core.setFailed(`Downstream build failures:\n${failures.join('\n')}`);
+            } else {
+              console.log('All downstream builds succeeded');
+            }
+
+      - name: Downstream verification summary
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const runIds = JSON.parse('${{ needs.trigger-downstream.outputs.run_ids }}');
+            const entries = Object.entries(runIds);
+            let summary = '### Downstream Build Verification\n\n';
+
+            if (entries.length === 0) {
+              summary += '⚠️ No downstream runs were captured for verification.\n';
+            } else {
+              summary += '| Workflow | Run | Status |\n|----------|-----|--------|\n';
+              for (const [workflow, runId] of entries) {
+                try {
+                  const { data: run } = await github.rest.actions.getWorkflowRun({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: runId
+                  });
+                  const icon = run.conclusion === 'success' ? '✅' : run.conclusion === 'failure' ? '❌' : '⚠️';
+                  summary += `| ${workflow} | [#${runId}](${run.html_url}) | ${icon} ${run.conclusion || run.status} |\n`;
+                } catch (e) {
+                  summary += `| ${workflow} | ${runId} | ⚠️ unknown |\n`;
+                }
+              }
+            }
+
+            await core.summary.addRaw(summary).write();

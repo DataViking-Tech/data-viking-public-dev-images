@@ -7,7 +7,7 @@ Public dev container images built and managed in a single monorepo.
 | Image | Description | Registry |
 |-------|-------------|----------|
 | [ai-dev-base](ai-dev-base/) | Foundation image: Python 3.11, Node.js, Claude CLI, Beads, Gas Town, dev-infra | `ghcr.io/dataviking-tech/ai-dev-base` |
-| [godot-game-dev](godot-game-dev/) | Godot 4.5.1 game development environment | `ghcr.io/dataviking-tech/godot-game-dev-image` |
+| [godot-game-dev](godot-game-dev/) | Godot 4.6.1 game development environment | `ghcr.io/dataviking-tech/godot-game-dev-image` |
 | [dbt-postgres](dbt-postgres/) | dbt-core + dbt-postgres data engineering environment | `ghcr.io/dataviking-tech/dbt-postgres` |
 
 ## Architecture
@@ -34,6 +34,12 @@ Tags are created automatically on PR merge based on semver labels:
 | `semver:minor` | New features (backward-compatible) |
 | `semver:major` | Breaking changes |
 | `semver:skip` | No release |
+
+## Edge Rollback
+
+Every edge build preserves the previous `:edge` image as `:edge-previous` before publishing the new one. If a nightly build introduces a regression, switch to `:edge-previous` for an immediate rollback.
+
+See [docs/EDGE-ROLLBACK-RUNBOOK.md](docs/EDGE-ROLLBACK-RUNBOOK.md) for the full rollback procedure.
 
 ## CI Isolation
 

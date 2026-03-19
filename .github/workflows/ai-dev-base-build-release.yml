@@ -71,15 +71,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -87,7 +87,7 @@ jobs:
 
       - name: Build and push (single platform)
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           context: ai-dev-base
           platforms: ${{ matrix.platform }}
@@ -103,13 +103,21 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }} \
             /usr/local/bin/test-tools.sh
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
       - name: Save digest
         run: |
           mkdir -p /tmp/digests
           echo "${{ steps.build.outputs.digest }}" > /tmp/digests/${{ matrix.arch }}
 
       - name: Upload digest
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: digest-${{ matrix.arch }}
           path: /tmp/digests/${{ matrix.arch }}
@@ -125,20 +133,20 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Download digests
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: digest-*
           path: /tmp/digests
           merge-multiple: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -172,3 +180,38 @@ jobs:
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}\` (immutable)" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.minor }}\` (tracks patch)" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.major }}\` (tracks minor)" >> $GITHUB_STEP_SUMMARY
+
+  notify-failure:
+    needs: [version, build, merge]
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/slack-notify-build-failure
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          image-name: ai-dev-base (release)
+          echo "" >> $GITHUB_STEP_SUMMARY
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}"
+          MANIFEST_INDEX=$(docker buildx imagetools inspect --raw "$IMAGE_REF")
+          echo "**Image Size (compressed):**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "$MANIFEST_INDEX" | jq -r '
+            .manifests[] | select(.platform.os == "linux") |
+            "\(.platform.architecture) \(.digest)"
+          ' | while IFS=' ' read -r ARCH DIGEST; do
+            PLAT_RAW=$(docker buildx imagetools inspect --raw "${IMAGE_REF}@${DIGEST}")
+            LAYER_BYTES=$(echo "$PLAT_RAW" | jq '[.layers[].size] | add')
+            CONFIG_BYTES=$(echo "$PLAT_RAW" | jq '.config.size')
+            TOTAL_BYTES=$((LAYER_BYTES + CONFIG_BYTES))
+            if [ "$TOTAL_BYTES" -ge 1073741824 ]; then
+              SIZE=$(echo "scale=2; $TOTAL_BYTES / 1073741824" | bc)
+              echo "| linux/${ARCH} | ${SIZE} GB |" >> $GITHUB_STEP_SUMMARY
+            else
+              SIZE=$(echo "scale=1; $TOTAL_BYTES / 1048576" | bc)
+              echo "| linux/${ARCH} | ${SIZE} MB |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
