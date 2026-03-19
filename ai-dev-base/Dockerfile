@@ -32,6 +32,7 @@ FROM debian:bookworm-slim
 # Build arguments for external binary versions
 ARG GASTOWN_VERSION=0.12.0
 ARG DOLT_VERSION=1.83.5
+ARG CLAUDE_CODE_VERSION=2.1.77
 ARG CODEX_VERSION=0.114.0
 ARG WRANGLER_VERSION=4.73.0
 
@@ -126,7 +127,7 @@ RUN set -e && \
     GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" && \
     CC_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
     PLATFORM="linux-${CC_ARCH}" && \
-    VERSION=$(curl -fsSL "$GCS_BUCKET/latest") && \
+    VERSION="${CLAUDE_CODE_VERSION}" && \
     MANIFEST=$(curl -fsSL "$GCS_BUCKET/$VERSION/manifest.json") && \
     CHECKSUM=$(echo "$MANIFEST" | jq -r ".platforms[\"$PLATFORM\"].checksum") && \
     curl -fsSL -o /tmp/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude" && \
