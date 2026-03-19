@@ -58,6 +58,12 @@ jobs:
           format: 'table'
           exit-code: '0'
           severity: 'CRITICAL,HIGH'
+      - name: Image size summary
+        run: |
+          echo "### ai-dev-base PR Build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          SIZE=$(docker images ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }} --format '{{.Size}}')
+          echo "**Image Size (uncompressed):** ${SIZE}" >> $GITHUB_STEP_SUMMARY
 
       - name: Export ai-dev-base image for downstream jobs
         run: docker save ghcr.io/dataviking-tech/ai-dev-base:edge -o /tmp/ai-dev-base.tar

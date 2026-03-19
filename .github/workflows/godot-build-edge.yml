@@ -111,3 +111,26 @@ jobs:
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           image-name: godot-game-dev (edge)
+          echo "" >> $GITHUB_STEP_SUMMARY
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge"
+          MANIFEST_INDEX=$(docker buildx imagetools inspect --raw "$IMAGE_REF")
+          echo "**Image Size (compressed):**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "$MANIFEST_INDEX" | jq -r '
+            .manifests[] | select(.platform.os == "linux") |
+            "\(.platform.architecture) \(.digest)"
+          ' | while IFS=' ' read -r ARCH DIGEST; do
+            PLAT_RAW=$(docker buildx imagetools inspect --raw "${IMAGE_REF}@${DIGEST}")
+            LAYER_BYTES=$(echo "$PLAT_RAW" | jq '[.layers[].size] | add')
+            CONFIG_BYTES=$(echo "$PLAT_RAW" | jq '.config.size')
+            TOTAL_BYTES=$((LAYER_BYTES + CONFIG_BYTES))
+            if [ "$TOTAL_BYTES" -ge 1073741824 ]; then
+              SIZE=$(echo "scale=2; $TOTAL_BYTES / 1073741824" | bc)
+              echo "| linux/${ARCH} | ${SIZE} GB |" >> $GITHUB_STEP_SUMMARY
+            else
+              SIZE=$(echo "scale=1; $TOTAL_BYTES / 1048576" | bc)
+              echo "| linux/${ARCH} | ${SIZE} MB |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
