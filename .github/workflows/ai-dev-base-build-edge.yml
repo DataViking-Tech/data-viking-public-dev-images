@@ -156,9 +156,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: write
+    outputs:
+      run_ids: ${{ steps.dispatch.outputs.run_ids }}
 
     steps:
       - name: Trigger downstream edge rebuilds
+        id: dispatch
         uses: actions/github-script@v8
         with:
           script: |
@@ -166,7 +169,18 @@ jobs:
               'godot-build-edge.yml',
               'dbt-build-edge.yml'
             ];
+            const runIds = {};
+
             for (const workflow of workflows) {
+              // Record runs before dispatch to find the new one
+              const before = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflow,
+                per_page: 1
+              });
+              const latestBefore = before.data.workflow_runs[0]?.id || 0;
+
               console.log(`Dispatching ${workflow}...`);
               await github.rest.actions.createWorkflowDispatch({
                 owner: context.repo.owner,
@@ -175,4 +189,127 @@ jobs:
                 ref: 'main'
               });
               console.log(`Dispatched ${workflow}`);
+
+              // Poll for the new run to appear (up to 60s)
+              let runId = null;
+              for (let i = 0; i < 12; i++) {
+                await new Promise(r => setTimeout(r, 5000));
+                const after = await github.rest.actions.listWorkflowRuns({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: workflow,
+                  per_page: 5
+                });
+                const newRun = after.data.workflow_runs.find(
+                  r => r.id > latestBefore && r.event === 'workflow_dispatch'
+                );
+                if (newRun) {
+                  runId = newRun.id;
+                  break;
+                }
+              }
+
+              if (runId) {
+                runIds[workflow] = runId;
+                console.log(`Found run ${runId} for ${workflow}`);
+              } else {
+                console.log(`Warning: could not find run ID for ${workflow}`);
+              }
             }
+
+            core.setOutput('run_ids', JSON.stringify(runIds));
+
+  verify-downstream:
+    needs: trigger-downstream
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+
+    steps:
+      - name: Wait for downstream builds to complete
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const runIds = JSON.parse('${{ needs.trigger-downstream.outputs.run_ids }}');
+            const entries = Object.entries(runIds);
+
+            if (entries.length === 0) {
+              core.warning('No downstream run IDs captured — skipping verification');
+              return;
+            }
+
+            const maxWait = 30 * 60 * 1000; // 30 minutes
+            const pollInterval = 30 * 1000;  // 30 seconds
+            const start = Date.now();
+
+            const pending = new Map(entries);
+            const results = {};
+
+            while (pending.size > 0) {
+              if (Date.now() - start > maxWait) {
+                const timedOut = [...pending.keys()].join(', ');
+                core.setFailed(`Timed out waiting for downstream builds: ${timedOut}`);
+                return;
+              }
+
+              for (const [workflow, runId] of [...pending.entries()]) {
+                const { data: run } = await github.rest.actions.getWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: runId
+                });
+
+                if (run.status === 'completed') {
+                  results[workflow] = run.conclusion;
+                  pending.delete(workflow);
+                  console.log(`${workflow} (run ${runId}): ${run.conclusion}`);
+                }
+              }
+
+              if (pending.size > 0) {
+                const elapsed = Math.round((Date.now() - start) / 1000);
+                console.log(`Waiting... ${pending.size} build(s) still running (${elapsed}s elapsed)`);
+                await new Promise(r => setTimeout(r, pollInterval));
+              }
+            }
+
+            // Check results
+            const failures = Object.entries(results)
+              .filter(([, conclusion]) => conclusion !== 'success')
+              .map(([workflow, conclusion]) => `${workflow}: ${conclusion}`);
+
+            if (failures.length > 0) {
+              core.setFailed(`Downstream build failures:\n${failures.join('\n')}`);
+            } else {
+              console.log('All downstream builds succeeded');
+            }
+
+      - name: Downstream verification summary
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const runIds = JSON.parse('${{ needs.trigger-downstream.outputs.run_ids }}');
+            const entries = Object.entries(runIds);
+            let summary = '### Downstream Build Verification\n\n';
+
+            if (entries.length === 0) {
+              summary += '⚠️ No downstream runs were captured for verification.\n';
+            } else {
+              summary += '| Workflow | Run | Status |\n|----------|-----|--------|\n';
+              for (const [workflow, runId] of entries) {
+                try {
+                  const { data: run } = await github.rest.actions.getWorkflowRun({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: runId
+                  });
+                  const icon = run.conclusion === 'success' ? '✅' : run.conclusion === 'failure' ? '❌' : '⚠️';
+                  summary += `| ${workflow} | [#${runId}](${run.html_url}) | ${icon} ${run.conclusion || run.status} |\n`;
+                } catch (e) {
+                  summary += `| ${workflow} | ${runId} | ⚠️ unknown |\n`;
+                }
+              }
+            }
+
+            await core.summary.addRaw(summary).write();
