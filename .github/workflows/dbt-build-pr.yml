@@ -55,8 +55,9 @@ jobs:
           docker run --rm ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }} \
             /usr/local/bin/validate-tools.sh
 
+  # Validate arm64 build on native runner (no QEMU)
   validate-arm64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
 
@@ -71,10 +72,6 @@ jobs:
           filters: |
             base:
               - 'ai-dev-base/**'
-
-      - name: Set up QEMU (arm64 emulation)
-        if: steps.base-changes.outputs.base != 'true'
-        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         if: steps.base-changes.outputs.base != 'true'
