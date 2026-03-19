@@ -32,7 +32,7 @@ USER vscode
 RUN /usr/local/bin/validate-tools.sh
 USER root
 
-WORKDIR /workspace
+WORKDIR /workspaces
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD dbt --version && python3 --version || exit 1

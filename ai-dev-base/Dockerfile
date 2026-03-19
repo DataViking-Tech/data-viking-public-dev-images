@@ -87,7 +87,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
       > /etc/apt/sources.list.d/doppler-cli.list && \
     # Single install for all external apt packages
     apt-get update && apt-get install -y --no-install-recommends \
-      gh docker-ce-cli docker-compose-plugin doppler postgresql-client && \
+      gh docker-ce-cli docker-compose-plugin doppler && \
     groupadd -f docker && usermod -aG docker vscode && \
     rm -rf /var/lib/apt/lists/*
 
