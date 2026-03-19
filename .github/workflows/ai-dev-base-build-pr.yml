@@ -24,13 +24,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Build amd64 image (no push)
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           context: ai-dev-base
           push: false
@@ -69,7 +69,7 @@ jobs:
         run: docker save ghcr.io/dataviking-tech/ai-dev-base:edge -o /tmp/ai-dev-base.tar
 
       - name: Upload ai-dev-base image artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: ai-dev-base-image
           path: /tmp/ai-dev-base.tar
@@ -83,10 +83,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Download ai-dev-base image
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ai-dev-base-image
           path: /tmp
@@ -95,7 +95,7 @@ jobs:
         run: docker load -i /tmp/ai-dev-base.tar
 
       - name: Build dbt-postgres image (no push)
-        uses: devcontainers/ci@v0.3
+        uses: devcontainers/ci@8bf61b26e9c3a98f69cb6ce2f88d24ff59b785c6 # v0.3
         with:
           configFile: dbt-postgres/.devcontainer/ci/devcontainer.json
           imageName: dbt-postgres-pr
@@ -123,10 +123,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Download ai-dev-base image
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ai-dev-base-image
           path: /tmp
@@ -135,7 +135,7 @@ jobs:
         run: docker load -i /tmp/ai-dev-base.tar
 
       - name: Build godot-game-dev image (no push)
-        uses: devcontainers/ci@v0.3
+        uses: devcontainers/ci@8bf61b26e9c3a98f69cb6ce2f88d24ff59b785c6 # v0.3
         with:
           configFile: godot-game-dev/.devcontainer/ci/devcontainer.json
           imageName: godot-game-dev-pr
@@ -177,13 +177,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Build arm64 image (validation only)
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           context: ai-dev-base
           push: false
