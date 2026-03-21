@@ -10,6 +10,10 @@ on:
         description: 'The version tag to build (e.g. ai-dev-base/v1.2.3)'
         required: true
         type: string
+    secrets:
+      SLACK_WEBHOOK_URL:
+        description: 'Slack webhook URL for build failure notifications'
+        required: false
   workflow_dispatch:
 
 env:
