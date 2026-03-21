@@ -8,6 +8,7 @@ on:
     paths:
       - 'godot-game-dev/**'
       - '.github/workflows/godot-build-pr.yml'
+      - '.trivyignore'
 
 concurrency:
   group: godot-pr-build-${{ github.event.pull_request.number }}
@@ -61,12 +62,15 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         if: steps.base-changes.outputs.base != 'true'
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
+          ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
+          trivyignores: .trivyignore
+          skip-dirs: /usr/local/install/cache
 
   validate-arm64:
     runs-on: ubuntu-latest

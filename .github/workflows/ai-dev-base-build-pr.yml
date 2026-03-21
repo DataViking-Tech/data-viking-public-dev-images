@@ -8,6 +8,7 @@ on:
     paths:
       - 'ai-dev-base/**'
       - '.github/workflows/ai-dev-base-build-pr.yml'
+      - '.trivyignore'
 
 concurrency:
   group: ai-dev-base-pr-build-${{ github.event.pull_request.number }}
@@ -52,12 +53,15 @@ jobs:
         run: ./ai-dev-base/tests/validate-metadata.sh ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
+          ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
+          trivyignores: .trivyignore
+          skip-dirs: /usr/local/install/cache
       - name: Image size summary
         run: |
           echo "### ai-dev-base PR Build" >> $GITHUB_STEP_SUMMARY
@@ -108,12 +112,15 @@ jobs:
             /usr/local/bin/validate-tools.sh
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: dbt-postgres-pr:${{ github.event.pull_request.number }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
+          ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
+          trivyignores: .trivyignore
+          skip-dirs: /usr/local/install/cache
 
   build-godot-game-dev:
     needs: build-and-test
@@ -151,12 +158,15 @@ jobs:
         run: ./godot-game-dev/tests/validate-metadata.sh godot-game-dev-pr:${{ github.event.pull_request.number }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: godot-game-dev-pr:${{ github.event.pull_request.number }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
+          ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
+          trivyignores: .trivyignore
+          skip-dirs: /usr/local/install/cache
   notify-failure:
     needs: [build-and-test, build-dbt-postgres, build-godot-game-dev, validate-arm64]
     if: ${{ always() && contains(needs.*.result, 'failure') }}
