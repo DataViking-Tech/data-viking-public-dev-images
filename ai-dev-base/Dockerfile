@@ -229,7 +229,7 @@ LABEL devcontainer.metadata='[{ \
     "CLAUDE_CONFIG_DIR": "/home/vscode/.claude" \
   }, \
   "mounts": [ \
-	"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind", \
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind", \
     "source=claude-code-config-${localWorkspaceFolderBasename},target=/home/vscode/.claude,type=volume", \
     "source=gastown-data-${localWorkspaceFolderBasename},target=/home/vscode/gt,type=volume", \
     "source=shared-gh-auth,target=/home/vscode/.shared-auth/gh,type=volume", \
