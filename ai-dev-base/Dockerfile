@@ -69,9 +69,17 @@ RUN ARCH=$(dpkg --print-architecture) && \
     # which adds a repo + runs apt-get update redundantly)
     NODE_VERSION=20.20.0 && \
     NODE_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
+    case "$(uname -m)" in \
+      x86_64)  NODE_SHA256="92dfd59fb4837230abba5d6dd717b882ca897e22fde2f9268e1aac2c4bde0f5b" ;; \
+      aarch64) NODE_SHA256="2b640b7fc19a1d2f12a226d7dfba9baff2de87cc15db5a3e58bcdb15582ac604" ;; \
+      *) echo "Unsupported arch: $(uname -m)" >&2; exit 1 ;; \
+    esac && \
     curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
       "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" \
-      | tar xz --strip-components=1 -C /usr/local && \
+      -o /tmp/node.tar.gz && \
+    echo "${NODE_SHA256}  /tmp/node.tar.gz" | sha256sum -c - && \
+    tar xz --strip-components=1 -C /usr/local < /tmp/node.tar.gz && \
+    rm /tmp/node.tar.gz && \
     # GitHub CLI
     curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
       https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -118,12 +126,24 @@ ENV BUN_INSTALL="/usr/local"
 RUN set -e && \
     # Gastown
     ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
+    case "$(uname -m)" in \
+      x86_64)  GT_SHA256="99fcd1f170796d495efa285a3bfdf0cbe2778eb6aee31d452d48a1d1a14c2552" ;; \
+      aarch64) GT_SHA256="dbba962c13bcd7d592bf61605cd71aba35fa7e6cf637fcdd342796a58f754cc0" ;; \
+      *) echo "Unsupported arch: $(uname -m)" >&2; exit 1 ;; \
+    esac && \
     wget -q --tries=3 --waitretry=2 "https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/gastown.tar.gz && \
+    echo "${GT_SHA256}  /tmp/gastown.tar.gz" | sha256sum -c - && \
     tar xzf /tmp/gastown.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/gt && \
     rm /tmp/gastown.tar.gz && \
     # Dolt (SQL server managed by gt for multi-agent beads access)
+    case "$(uname -m)" in \
+      x86_64)  DOLT_SHA256="afcdaa9530ae0b4f317ed6041a41d20096e156b2556eb0e03c7c57a624ccc0b3" ;; \
+      aarch64) DOLT_SHA256="743ab050b28ff2e95d81088f250986a4d75aca08225a88e56a6663c4c9a3762b" ;; \
+      *) echo "Unsupported arch: $(uname -m)" >&2; exit 1 ;; \
+    esac && \
     wget -q --tries=3 --waitretry=2 "https://github.com/dolthub/dolt/releases/download/v${DOLT_VERSION}/dolt-linux-${ARCH}.tar.gz" -O /tmp/dolt.tar.gz && \
+    echo "${DOLT_SHA256}  /tmp/dolt.tar.gz" | sha256sum -c - && \
     tar xzf /tmp/dolt.tar.gz -C /tmp && \
     mv /tmp/dolt-linux-${ARCH}/bin/dolt /usr/local/bin/dolt && \
     chmod +x /usr/local/bin/dolt && \
@@ -143,8 +163,14 @@ RUN set -e && \
     chmod +x /usr/local/bin/claude && \
     # Codex CLI
     CODEX_ARCH=$(uname -m) && \
+    case "$(uname -m)" in \
+      x86_64)  CODEX_SHA256="27b05346ed6f3ac09c8e79226c4f982bf3f93883f6f2acd1b82c3b427d014b74" ;; \
+      aarch64) CODEX_SHA256="fd25133debb067e2b7a2e75d7d7e20dfb1afbd8c77a5cd009cfe6f44e927e4d4" ;; \
+      *) echo "Unsupported arch: $(uname -m)" >&2; exit 1 ;; \
+    esac && \
     curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/codex.tar.gz \
       "https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-${CODEX_ARCH}-unknown-linux-gnu.tar.gz" && \
+    echo "${CODEX_SHA256}  /tmp/codex.tar.gz" | sha256sum -c - && \
     tar xzf /tmp/codex.tar.gz -C /tmp && \
     mv /tmp/codex-${CODEX_ARCH}-unknown-linux-gnu /usr/local/bin/codex && \
     chmod +x /usr/local/bin/codex && \
