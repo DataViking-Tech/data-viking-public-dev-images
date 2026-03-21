@@ -10,6 +10,9 @@ on:
         description: 'The version tag to build (e.g. godot-game-dev/v1.2.3)'
         required: true
         type: string
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: false
   workflow_dispatch:
 
 env:
@@ -106,11 +109,12 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         if: steps.version.outputs.VERSION != 'manual'
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
+          ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
       - name: Image summary
