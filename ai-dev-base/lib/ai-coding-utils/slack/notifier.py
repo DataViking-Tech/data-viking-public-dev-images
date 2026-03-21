@@ -13,6 +13,7 @@ import os
 import re
 import stat
 import sys
+import time
 import logging
 from collections import deque
 from dataclasses import dataclass
@@ -133,7 +134,7 @@ class RateLimiter:
 
     def allow(self) -> bool:
         """Check if a request is allowed under the rate limit."""
-        now = os.times().elapsed if hasattr(os.times(), 'elapsed') else __import__('time').time()
+        now = time.monotonic()
         while self.requests and self.requests[0] < now - self.window_seconds:
             self.requests.popleft()
         if len(self.requests) >= self.max_requests:
@@ -142,7 +143,7 @@ class RateLimiter:
         return True
 
     def get_stats(self) -> dict:
-        now = os.times().elapsed if hasattr(os.times(), 'elapsed') else __import__('time').time()
+        now = time.monotonic()
         while self.requests and self.requests[0] < now - self.window_seconds:
             self.requests.popleft()
         return {
