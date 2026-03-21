@@ -34,14 +34,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Godot (arch-aware: x86_64 / arm64)
 RUN GODOT_ARCH=$(uname -m | sed 's/aarch64/arm64/') && \
-    echo "Installing Godot ${GODOT_VERSION} (${GODOT_ARCH})..." \
-    && wget -q --tries=3 --waitretry=2 "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" \
-    && unzip -q "Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" -d /opt \
-    && mv "/opt/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}" /opt/godot \
-    && chmod +x /opt/godot \
-    && ln -s /opt/godot /usr/local/bin/godot \
-    && rm "Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" \
-    && godot --version
+    echo "Installing Godot ${GODOT_VERSION} (${GODOT_ARCH})..." && \
+    wget -q --tries=3 --waitretry=2 \
+      "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" \
+      -O /tmp/godot.zip && \
+    GODOT_SHA=$(wget -qO- --tries=3 --waitretry=2 \
+      "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/SHA512-SUMS.txt" \
+      | grep "Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" | awk '{print $1}') && \
+    echo "${GODOT_SHA}  /tmp/godot.zip" | sha512sum -c - && \
+    unzip -q /tmp/godot.zip -d /opt && \
+    mv "/opt/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}" /opt/godot && \
+    chmod +x /opt/godot && \
+    ln -s /opt/godot /usr/local/bin/godot && \
+    rm /tmp/godot.zip && \
+    godot --version
 
 # Install game-specific Python packages via uv (target Python 3.11 from base image)
 # bpy (Blender Python) only publishes x86_64 wheels — install conditionally
