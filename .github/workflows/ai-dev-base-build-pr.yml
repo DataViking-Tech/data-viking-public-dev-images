@@ -61,6 +61,7 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
           trivyignores: .trivyignore
+          skip-dirs: /usr/local/install/cache
       - name: Image size summary
         run: |
           echo "### ai-dev-base PR Build" >> $GITHUB_STEP_SUMMARY
@@ -119,6 +120,7 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
           trivyignores: .trivyignore
+          skip-dirs: /usr/local/install/cache
 
   build-godot-game-dev:
     needs: build-and-test
@@ -164,6 +166,7 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
           trivyignores: .trivyignore
+          skip-dirs: /usr/local/install/cache
   notify-failure:
     needs: [build-and-test, build-dbt-postgres, build-godot-game-dev, validate-arm64]
     if: ${{ always() && contains(needs.*.result, 'failure') }}

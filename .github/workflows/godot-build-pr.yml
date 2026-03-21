@@ -70,6 +70,7 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
           trivyignores: .trivyignore
+          skip-dirs: /usr/local/install/cache
 
   validate-arm64:
     runs-on: ubuntu-latest

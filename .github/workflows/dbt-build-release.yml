@@ -117,6 +117,7 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
           trivyignores: .trivyignore
+          skip-dirs: /usr/local/install/cache
 
       - name: Image summary
         if: steps.version.outputs.VERSION != 'manual'

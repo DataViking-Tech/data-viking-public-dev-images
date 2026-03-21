@@ -24,3 +24,9 @@ CVE-2026-33186
 # In: gastown v0.12.1 (otel/sdk v1.38.0)
 # Fix: upstream gastown rebuild with otel/sdk >= 1.40.0
 CVE-2026-24051
+
+# AsymmetricPrivateKey (secret/private-key) false positives
+# In: /usr/local/install/cache/wrangler and miniflare JS bundles
+# These are test-fixture private keys embedded in Cloudflare's tooling bundles —
+# not real secrets. The install/cache directory is excluded via skip-dirs in all
+# trivy-action steps. Listed here for documentation purposes.

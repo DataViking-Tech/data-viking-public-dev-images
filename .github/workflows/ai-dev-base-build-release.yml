@@ -115,6 +115,7 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
           trivyignores: .trivyignore
+          skip-dirs: /usr/local/install/cache
 
       - name: Save digest
         run: |
