@@ -38,7 +38,7 @@ ARG CLAUDE_CODE_VERSION=2.1.77
 ARG CODEX_VERSION=0.114.0
 ARG UV_VERSION=0.7.12
 ARG BUN_VERSION=1.2.9
-ARG WRANGLER_VERSION=4.73.0
+ARG WRANGLER_VERSION=4.76.0
 
 # Create vscode user, set up locale, and install all system packages in a
 # single apt transaction. No build-essential — all compiled binaries come
