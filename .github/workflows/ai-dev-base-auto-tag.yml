@@ -136,4 +136,5 @@ jobs:
     uses: ./.github/workflows/ai-dev-base-build-release.yml
     with:
       tag: ${{ needs.auto-tag.outputs.tag }}
-    secrets: inherit
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
