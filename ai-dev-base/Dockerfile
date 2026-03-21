@@ -6,7 +6,7 @@
 # Building from source ensures CGO is enabled on all architectures.
 # See: https://github.com/steveyegge/beads/pull/1 (arm64 CGO fix)
 ###############################################################################
-FROM golang:1.26-bookworm AS beads-builder
+FROM golang:1.26-bookworm@sha256:8e8aa801e8417ef0b5c42b504dd34db3db911bb73dba933bd8bde75ed815fdbb AS beads-builder
 ARG BEADS_VERSION=0.61.0
 RUN apt-get update && apt-get install -y --no-install-recommends git gcc g++ libicu-dev && \
     rm -rf /var/lib/apt/lists/*
@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 ###############################################################################
 # Stage 2: Final image
 ###############################################################################
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
 
 # Build arguments for external binary versions
 ARG GASTOWN_VERSION=0.12.1
