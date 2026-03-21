@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM debian:bookworm-slim
 
 # Build arguments for external binary versions
-ARG GASTOWN_VERSION=0.12.0
+ARG GASTOWN_VERSION=0.12.1
 ARG DOLT_VERSION=1.83.5
 ARG CLAUDE_CODE_VERSION=2.1.77
 ARG CODEX_VERSION=0.116.0
