@@ -133,7 +133,9 @@ class RenderBridge:
         while True:
             if self.is_complete(job_id):
                 result = self.get_result(job_id)
-                if result and result.status == JobStatus.FAILED.value:
+                if result is None:
+                    raise RuntimeError(f"Render job {job_id} completed but result could not be read")
+                if result.status == JobStatus.FAILED.value:
                     raise RuntimeError(f"Render job {job_id} failed: {result.error_message}")
                 return result
             
