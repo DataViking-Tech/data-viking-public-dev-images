@@ -213,12 +213,12 @@ svc_start_notifier() {
 }
 
 svc_stop_notifier() {
-  _kill_by_pidfile ".beads/slack_notifier.pid"
+  _kill_by_pidfile "$GASTOWN_HOME/.beads/slack_notifier.pid"
 }
 
 svc_status_notifier() {
   local pid
-  if pid=$(_check_pid ".beads/slack_notifier.pid"); then
+  if pid=$(_check_pid "$GASTOWN_HOME/.beads/slack_notifier.pid"); then
     printf "  %-16s %s\n" "notifier" "running (pid $pid)"
   else
     if [ -f ".beads/slack_config.yaml" ] || [ -f ".secrets/slack_webhook" ] || [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
