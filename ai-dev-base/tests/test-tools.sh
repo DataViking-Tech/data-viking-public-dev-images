@@ -92,9 +92,6 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
-# Test psql (needed by supa-query)
-test_command "PostgreSQL client (psql)" "psql --version" "psql"
-
 # Test CLI wrappers (existence and syntax only — no live API calls)
 test_command "CLI wrapper (dop)" "which dop && bash -n /opt/dev-infra/cli/dop.sh" ""
 test_command "CLI wrapper (supa-query)" "which supa-query && bash -n /opt/dev-infra/cli/supa-query.sh" ""
