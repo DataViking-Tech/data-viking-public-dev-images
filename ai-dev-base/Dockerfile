@@ -70,8 +70,14 @@ RUN ARCH=$(dpkg --print-architecture) && \
     NODE_VERSION=20.20.0 && \
     NODE_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
     curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
-      "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" \
-      | tar xz --strip-components=1 -C /usr/local && \
+      -o /tmp/node.tar.gz \
+      "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" && \
+    NODE_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" | \
+      grep "node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" | awk '{print $1}') && \
+    echo "${NODE_SHA}  /tmp/node.tar.gz" | sha256sum -c - && \
+    tar xz --strip-components=1 -C /usr/local < /tmp/node.tar.gz && \
+    rm /tmp/node.tar.gz && \
     # GitHub CLI
     curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
       https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -97,8 +103,17 @@ RUN ARCH=$(dpkg --print-architecture) && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv (Python package manager) to system-wide location
-RUN curl -LsSf --retry 3 --retry-delay 2 --retry-all-errors "https://astral.sh/uv/${UV_VERSION}/install.sh" | env UV_INSTALL_DIR="/usr/local/bin" sh && \
-    chmod +x /usr/local/bin/uv /usr/local/bin/uvx
+RUN UV_ARCH=$(uname -m) && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      -o /tmp/uv.tar.gz \
+      "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}-unknown-linux-gnu.tar.gz" && \
+    UV_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}-unknown-linux-gnu.tar.gz.sha256" | awk '{print $1}') && \
+    echo "${UV_SHA}  /tmp/uv.tar.gz" | sha256sum -c - && \
+    mkdir /tmp/uv-extract && \
+    tar xzf /tmp/uv.tar.gz -C /tmp/uv-extract --strip-components=1 && \
+    install -m755 /tmp/uv-extract/uv /tmp/uv-extract/uvx /usr/local/bin/ && \
+    rm -rf /tmp/uv.tar.gz /tmp/uv-extract
 
 # Install Python 3.11 via uv and symlink to /usr/local/bin for all users
 ENV UV_PYTHON_INSTALL_DIR="/usr/local/share/uv/python"
@@ -119,17 +134,35 @@ RUN set -e && \
     # Gastown
     ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
     wget -q --tries=3 --waitretry=2 "https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/gastown.tar.gz && \
+    GT_SHA=$(wget -qO- "https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/checksums.txt" | \
+      grep "gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" | awk '{print $1}') && \
+    echo "${GT_SHA}  /tmp/gastown.tar.gz" | sha256sum -c - && \
     tar xzf /tmp/gastown.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/gt && \
     rm /tmp/gastown.tar.gz && \
     # Dolt (SQL server managed by gt for multi-agent beads access)
+    DOLT_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://api.github.com/repos/dolthub/dolt/releases/tags/v${DOLT_VERSION}" | \
+      jq -r ".assets[] | select(.name == \"dolt-linux-${ARCH}.tar.gz\") | .digest" | sed 's/sha256://') && \
     wget -q --tries=3 --waitretry=2 "https://github.com/dolthub/dolt/releases/download/v${DOLT_VERSION}/dolt-linux-${ARCH}.tar.gz" -O /tmp/dolt.tar.gz && \
+    echo "${DOLT_SHA}  /tmp/dolt.tar.gz" | sha256sum -c - && \
     tar xzf /tmp/dolt.tar.gz -C /tmp && \
     mv /tmp/dolt-linux-${ARCH}/bin/dolt /usr/local/bin/dolt && \
     chmod +x /usr/local/bin/dolt && \
     rm -rf /tmp/dolt.tar.gz /tmp/dolt-linux-${ARCH} && \
     # Bun
-    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors https://bun.sh/install | BUN_VERSION="bun-v${BUN_VERSION}" bash && \
+    BUN_ARCH=$(uname -m | sed 's/x86_64/x64/') && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      -o /tmp/bun.zip \
+      "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-${BUN_ARCH}.zip" && \
+    BUN_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/SHASUMS256.txt" | \
+      grep "bun-linux-${BUN_ARCH}.zip$" | awk '{print $1}') && \
+    echo "${BUN_SHA}  /tmp/bun.zip" | sha256sum -c - && \
+    unzip -q /tmp/bun.zip -d /tmp/bun-extract && \
+    install -m755 /tmp/bun-extract/bun-linux-${BUN_ARCH}/bun /usr/local/bin/bun && \
+    ln -sf /usr/local/bin/bun /usr/local/bin/bunx && \
+    rm -rf /tmp/bun.zip /tmp/bun-extract && \
     # Claude Code
     GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" && \
     CC_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
@@ -143,16 +176,28 @@ RUN set -e && \
     chmod +x /usr/local/bin/claude && \
     # Codex CLI
     CODEX_ARCH=$(uname -m) && \
+    CODEX_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://api.github.com/repos/openai/codex/releases/tags/rust-v${CODEX_VERSION}" | \
+      jq -r ".assets[] | select(.name == \"codex-${CODEX_ARCH}-unknown-linux-gnu.tar.gz\") | .digest" | sed 's/sha256://') && \
     curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/codex.tar.gz \
       "https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-${CODEX_ARCH}-unknown-linux-gnu.tar.gz" && \
+    echo "${CODEX_SHA}  /tmp/codex.tar.gz" | sha256sum -c - && \
     tar xzf /tmp/codex.tar.gz -C /tmp && \
     mv /tmp/codex-${CODEX_ARCH}-unknown-linux-gnu /usr/local/bin/codex && \
     chmod +x /usr/local/bin/codex && \
     rm /tmp/codex.tar.gz && \
     # Amp CLI
-    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors https://ampcode.com/install.sh | bash && \
-    mv /root/.amp/bin/amp /usr/local/bin/amp && \
-    chmod +x /usr/local/bin/amp
+    AMP_PLATFORM=$(uname -m | sed 's/x86_64/linux-x64/;s/aarch64/linux-arm64/') && \
+    AMP_VERSION=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://storage.googleapis.com/amp-public-assets-prod-0/cli/cli-version.txt") && \
+    AMP_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://storage.googleapis.com/amp-public-assets-prod-0/cli/${AMP_VERSION}/${AMP_PLATFORM}-amp.sha256") && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      -o /tmp/amp \
+      "https://storage.googleapis.com/amp-public-assets-prod-0/cli/${AMP_VERSION}/amp-${AMP_PLATFORM}" && \
+    echo "${AMP_SHA}  /tmp/amp" | sha256sum -c - && \
+    install -m755 /tmp/amp /usr/local/bin/amp && \
+    rm /tmp/amp
 
 # Install JS CLI tools via bun (single layer)
 RUN bun install -g wrangler@${WRANGLER_VERSION}
