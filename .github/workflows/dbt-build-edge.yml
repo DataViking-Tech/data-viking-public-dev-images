@@ -88,6 +88,33 @@ jobs:
           exit-code: '0'
           severity: 'CRITICAL,HIGH'
 
+      - name: Check image size threshold
+        run: |
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge"
+          MAX_BYTES=5368709120  # 5 GB per platform
+          MANIFEST_INDEX=$(docker buildx imagetools inspect --raw "$IMAGE_REF")
+          rm -f /tmp/size-check-failed
+          echo "$MANIFEST_INDEX" | jq -r '
+            .manifests[] | select(.platform.os == "linux") |
+            "\(.platform.architecture) \(.digest)"
+          ' | while IFS=' ' read -r ARCH DIGEST; do
+            PLAT_RAW=$(docker buildx imagetools inspect --raw "${IMAGE_REF}@${DIGEST}")
+            LAYER_BYTES=$(echo "$PLAT_RAW" | jq '[.layers[].size] | add')
+            CONFIG_BYTES=$(echo "$PLAT_RAW" | jq '.config.size')
+            TOTAL_BYTES=$((LAYER_BYTES + CONFIG_BYTES))
+            SIZE_MB=$(echo "scale=1; $TOTAL_BYTES / 1048576" | bc)
+            THRESHOLD_GB=$(echo "scale=0; $MAX_BYTES / 1073741824" | bc)
+            echo "linux/${ARCH}: ${SIZE_MB} MB (threshold: ${THRESHOLD_GB} GB)"
+            if [ "$TOTAL_BYTES" -gt "$MAX_BYTES" ]; then
+              echo "ERROR: linux/${ARCH} image size ${SIZE_MB} MB exceeds ${THRESHOLD_GB} GB threshold" >&2
+              touch /tmp/size-check-failed
+            fi
+          done
+          if [ -f /tmp/size-check-failed ]; then
+            echo "Image size threshold exceeded — aborting to prevent bloat from shipping."
+            exit 1
+          fi
+
       - name: Image summary
         run: |
           echo "### dbt-postgres Edge Image Published" >> $GITHUB_STEP_SUMMARY
