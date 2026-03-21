@@ -180,18 +180,6 @@ jobs:
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}\` (immutable)" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.minor }}\` (tracks patch)" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.major }}\` (tracks minor)" >> $GITHUB_STEP_SUMMARY
-
-  notify-failure:
-    needs: [version, build, merge]
-    if: ${{ always() && contains(needs.*.result, 'failure') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - uses: ./.github/actions/slack-notify-build-failure
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          image-name: ai-dev-base (release)
           echo "" >> $GITHUB_STEP_SUMMARY
           IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}"
           MANIFEST_INDEX=$(docker buildx imagetools inspect --raw "$IMAGE_REF")
@@ -215,3 +203,15 @@ jobs:
               echo "| linux/${ARCH} | ${SIZE} MB |" >> $GITHUB_STEP_SUMMARY
             fi
           done
+
+  notify-failure:
+    needs: [version, build, merge]
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/slack-notify-build-failure
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          image-name: ai-dev-base (release)
