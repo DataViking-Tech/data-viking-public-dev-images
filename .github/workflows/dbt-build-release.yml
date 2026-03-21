@@ -110,7 +110,8 @@ jobs:
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
+          ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
       - name: Image summary

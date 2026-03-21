@@ -56,7 +56,8 @@ jobs:
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ github.event.pull_request.number }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
+          ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
       - name: Image size summary
         run: |
@@ -112,7 +113,8 @@ jobs:
         with:
           image-ref: dbt-postgres-pr:${{ github.event.pull_request.number }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
+          ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
   build-godot-game-dev:
@@ -155,7 +157,8 @@ jobs:
         with:
           image-ref: godot-game-dev-pr:${{ github.event.pull_request.number }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
+          ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
   notify-failure:
     needs: [build-and-test, build-dbt-postgres, build-godot-game-dev, validate-arm64]
