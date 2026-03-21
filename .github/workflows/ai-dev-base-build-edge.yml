@@ -150,18 +150,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge\`" >> $GITHUB_STEP_SUMMARY
           echo "**Rollback:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge-previous\`" >> $GITHUB_STEP_SUMMARY
-
-  notify-failure:
-    needs: [build, merge]
-    if: ${{ always() && contains(needs.*.result, 'failure') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - uses: ./.github/actions/slack-notify-build-failure
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          image-name: ai-dev-base (edge)
           echo "" >> $GITHUB_STEP_SUMMARY
           IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge"
           MANIFEST_INDEX=$(docker buildx imagetools inspect --raw "$IMAGE_REF")
@@ -185,6 +173,18 @@ jobs:
               echo "| linux/${ARCH} | ${SIZE} MB |" >> $GITHUB_STEP_SUMMARY
             fi
           done
+
+  notify-failure:
+    needs: [build, merge]
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/slack-notify-build-failure
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          image-name: ai-dev-base (edge)
 
   trigger-downstream:
     needs: merge
