@@ -39,6 +39,7 @@ ARG CODEX_VERSION=0.116.0
 ARG UV_VERSION=0.7.12
 ARG BUN_VERSION=1.2.9
 ARG WRANGLER_VERSION=4.76.0
+ARG AMP_VERSION=0.0.1774067329-g91f10a
 
 # Create vscode user, set up locale, and install all system packages in a
 # single apt transaction. No build-essential — all compiled binaries come
@@ -96,9 +97,18 @@ RUN ARCH=$(dpkg --print-architecture) && \
     groupadd -f docker && usermod -aG docker vscode && \
     rm -rf /var/lib/apt/lists/*
 
-# Install uv (Python package manager) to system-wide location
-RUN curl -LsSf --retry 3 --retry-delay 2 --retry-all-errors "https://astral.sh/uv/${UV_VERSION}/install.sh" | env UV_INSTALL_DIR="/usr/local/bin" sh && \
-    chmod +x /usr/local/bin/uv /usr/local/bin/uvx
+# Install uv (Python package manager) with SHA256 verification
+RUN UV_TARGET="$(uname -m)-unknown-linux-gnu" && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_TARGET}.tar.gz" \
+      -o /tmp/uv.tar.gz && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_TARGET}.tar.gz.sha256" \
+      -o /tmp/uv.sha256 && \
+    echo "$(awk '{print $1}' /tmp/uv.sha256)  /tmp/uv.tar.gz" | sha256sum -c - && \
+    tar xzf /tmp/uv.tar.gz --strip-components=1 -C /usr/local/bin && \
+    chmod +x /usr/local/bin/uv /usr/local/bin/uvx && \
+    rm /tmp/uv.tar.gz /tmp/uv.sha256
 
 # Install Python 3.11 via uv and symlink to /usr/local/bin for all users
 ENV UV_PYTHON_INSTALL_DIR="/usr/local/share/uv/python"
@@ -113,7 +123,7 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 # Install Beads binary (built from source in stage 1 with CGO_ENABLED=1)
 COPY --from=beads-builder /usr/local/bin/bd /usr/local/bin/bd
 
-# Install Gastown, Dolt, Bun, and Claude Code binaries (single layer)
+# Install Gastown, Dolt, Bun, Claude Code, Codex, and Amp binaries (single layer)
 ENV BUN_INSTALL="/usr/local"
 RUN set -e && \
     # Gastown
@@ -128,8 +138,20 @@ RUN set -e && \
     mv /tmp/dolt-linux-${ARCH}/bin/dolt /usr/local/bin/dolt && \
     chmod +x /usr/local/bin/dolt && \
     rm -rf /tmp/dolt.tar.gz /tmp/dolt-linux-${ARCH} && \
-    # Bun
-    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors https://bun.sh/install | BUN_VERSION="bun-v${BUN_VERSION}" bash && \
+    # Bun (with SHA256 verification)
+    BUN_ARCH=$(uname -m | sed 's/x86_64/x64/') && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/SHASUMS256.txt" \
+      -o /tmp/bun-shasums.txt && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-${BUN_ARCH}.zip" \
+      -o /tmp/bun.zip && \
+    grep -F "  bun-linux-${BUN_ARCH}.zip" /tmp/bun-shasums.txt | \
+      awk '{print $1"  /tmp/bun.zip"}' | sha256sum -c - && \
+    unzip -q /tmp/bun.zip -d /tmp/bun-extract && \
+    mv "/tmp/bun-extract/bun-linux-${BUN_ARCH}/bun" /usr/local/bin/bun && \
+    chmod +x /usr/local/bin/bun && \
+    rm -rf /tmp/bun.zip /tmp/bun-extract /tmp/bun-shasums.txt && \
     # Claude Code
     GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" && \
     CC_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
@@ -149,10 +171,18 @@ RUN set -e && \
     mv /tmp/codex-${CODEX_ARCH}-unknown-linux-gnu /usr/local/bin/codex && \
     chmod +x /usr/local/bin/codex && \
     rm /tmp/codex.tar.gz && \
-    # Amp CLI
-    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors https://ampcode.com/install.sh | bash && \
-    mv /root/.amp/bin/amp /usr/local/bin/amp && \
-    chmod +x /usr/local/bin/amp
+    # Amp CLI (with SHA256 verification)
+    AMP_PLATFORM=$(uname -m | sed 's/x86_64/linux-x64/;s/aarch64/linux-arm64/') && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://storage.googleapis.com/amp-public-assets-prod-0/cli/${AMP_VERSION}/amp-${AMP_PLATFORM}" \
+      -o /tmp/amp && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://storage.googleapis.com/amp-public-assets-prod-0/cli/${AMP_VERSION}/${AMP_PLATFORM}-amp.sha256" \
+      -o /tmp/amp.sha256 && \
+    echo "$(cat /tmp/amp.sha256)  /tmp/amp" | sha256sum -c - && \
+    mv /tmp/amp /usr/local/bin/amp && \
+    chmod +x /usr/local/bin/amp && \
+    rm /tmp/amp.sha256
 
 # Install JS CLI tools via bun (single layer)
 RUN bun install -g wrangler@${WRANGLER_VERSION}
