@@ -6,7 +6,7 @@
 # Building from source ensures CGO is enabled on all architectures.
 # See: https://github.com/steveyegge/beads/pull/1 (arm64 CGO fix)
 ###############################################################################
-FROM golang:1.26-bookworm AS beads-builder
+FROM golang:1.26-bookworm@sha256:8e8aa801e8417ef0b5c42b504dd34db3db911bb73dba933bd8bde75ed815fdbb AS beads-builder
 ARG BEADS_VERSION=0.61.0
 RUN apt-get update && apt-get install -y --no-install-recommends git gcc g++ libicu-dev && \
     rm -rf /var/lib/apt/lists/*
@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 ###############################################################################
 # Stage 2: Final image
 ###############################################################################
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
 
 # Build arguments for external binary versions
 ARG GASTOWN_VERSION=0.12.1
@@ -274,7 +274,7 @@ LABEL devcontainer.metadata='[{ \
     "CLAUDE_CONFIG_DIR": "/home/vscode/.claude" \
   }, \
   "mounts": [ \
-	"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind", \
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind", \
     "source=claude-code-config-${localWorkspaceFolderBasename},target=/home/vscode/.claude,type=volume", \
     "source=gastown-data-${localWorkspaceFolderBasename},target=/home/vscode/gt,type=volume", \
     "source=shared-gh-auth,target=/home/vscode/.shared-auth/gh,type=volume", \
@@ -296,7 +296,7 @@ LABEL devcontainer.metadata='[{ \
       } \
     } \
   }, \
-  "postCreateCommand": "/opt/dev-infra/setup/fix-workspace-ownership.sh; cp /usr/local/share/image-docs/UTILITIES.md .devcontainer/UTILITIES.md 2>/dev/null || true; [ ! -f .gitattributes ] && cp /usr/local/share/image-docs/.gitattributes .gitattributes 2>/dev/null || true; [ ! -f CLAUDE.md ] && cp /usr/local/share/image-docs/CLAUDE.md CLAUDE.md 2>/dev/null || true; [ ! -f .devcontainer/crew.json ] && cp /usr/local/share/image-docs/crew.json .devcontainer/crew.json 2>/dev/null || true; /opt/ai-coding-utils/beads/setup/ensure_beads.sh; /opt/dev-infra/setup/ensure_gastown.sh; /opt/dev-infra/setup/ensure_crew.sh; /opt/dev-infra/setup/install-agents.sh", \
+  "postCreateCommand": "/opt/dev-infra/setup/fix-workspace-ownership.sh && cp /usr/local/share/image-docs/UTILITIES.md .devcontainer/UTILITIES.md 2>/dev/null || true && [ ! -f .gitattributes ] && cp /usr/local/share/image-docs/.gitattributes .gitattributes 2>/dev/null || true && [ ! -f CLAUDE.md ] && cp /usr/local/share/image-docs/CLAUDE.md CLAUDE.md 2>/dev/null || true && [ ! -f .devcontainer/crew.json ] && cp /usr/local/share/image-docs/crew.json .devcontainer/crew.json 2>/dev/null || true && /opt/ai-coding-utils/beads/setup/ensure_beads.sh && /opt/dev-infra/setup/ensure_gastown.sh && /opt/dev-infra/setup/ensure_crew.sh && /opt/dev-infra/setup/install-agents.sh", \
   "postStartCommand": "dev-services start" \
 }]'
 

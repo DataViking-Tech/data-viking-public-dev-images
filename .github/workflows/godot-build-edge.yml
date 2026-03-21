@@ -68,7 +68,7 @@ jobs:
           cache-from: type=gha,scope=godot-game-dev
           cache-to: type=gha,mode=max,scope=godot-game-dev
           provenance: false
-          sbom: false
+          sbom: true
 
       - name: Test edge image (amd64)
         run: |
@@ -123,13 +123,32 @@ jobs:
             fi
           done
 
+      - name: Check image size threshold
+        run: |
+          MAX_COMPRESSED_BYTES=10737418240  # 10 GB — fail if accidental layer bloat doubles the image
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge"
+          MANIFEST_INDEX=$(docker buildx imagetools inspect --raw "$IMAGE_REF")
+          FAILED=0
+          while IFS=' ' read -r ARCH DIGEST; do
+            PLAT_RAW=$(docker buildx imagetools inspect --raw "${IMAGE_REF}@${DIGEST}")
+            LAYER_BYTES=$(echo "$PLAT_RAW" | jq '[.layers[].size] | add')
+            CONFIG_BYTES=$(echo "$PLAT_RAW" | jq '.config.size')
+            TOTAL_BYTES=$((LAYER_BYTES + CONFIG_BYTES))
+            echo "linux/${ARCH}: ${TOTAL_BYTES} bytes compressed"
+            if [ "$TOTAL_BYTES" -gt "$MAX_COMPRESSED_BYTES" ]; then
+              echo "ERROR: linux/${ARCH} exceeds size threshold (${TOTAL_BYTES} > ${MAX_COMPRESSED_BYTES})"
+              FAILED=1
+            fi
+          done < <(echo "$MANIFEST_INDEX" | jq -r '.manifests[] | select(.platform.os == "linux") | "\(.platform.architecture) \(.digest)"')
+          [ "$FAILED" -eq 0 ] || exit 1
+
   notify-failure:
     needs: [build-and-push]
     if: ${{ always() && contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: ./.github/actions/slack-notify-build-failure
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
