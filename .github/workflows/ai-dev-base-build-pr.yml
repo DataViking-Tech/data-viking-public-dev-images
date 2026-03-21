@@ -58,7 +58,7 @@ jobs:
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL,HIGH'          trivyignores: .trivyignore
       - name: Image size summary
         run: |
           echo "### ai-dev-base PR Build" >> $GITHUB_STEP_SUMMARY
@@ -115,7 +115,7 @@ jobs:
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL,HIGH'          trivyignores: .trivyignore
 
   build-godot-game-dev:
     needs: build-and-test
@@ -159,7 +159,7 @@ jobs:
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL,HIGH'          trivyignores: .trivyignore
   notify-failure:
     needs: [build-and-test, build-dbt-postgres, build-godot-game-dev, validate-arm64]
     if: ${{ always() && contains(needs.*.result, 'failure') }}

@@ -1,0 +1,26 @@
+# .trivyignore — acknowledged CVEs in pre-built binary tools
+#
+# These CVEs exist in pre-built binaries (gastown, dolt) that are already at
+# their latest released versions. They cannot be patched without upstream
+# rebuilds with newer Go toolchain/dependency versions.
+# Re-evaluate when upstream releases new versions.
+
+# CVE-2026-25679: net/url IPv6 host literal parsing (Go stdlib)
+# In: gastown v0.12.1 (built with Go 1.25.7), dolt v1.84.0 (built with Go 1.25.7)
+# Fix: upstream rebuild with Go >= 1.25.8
+CVE-2026-25679
+
+# CVE-2025-68121: crypto/tls unexpected session resumption (Go stdlib)
+# In: gastown v0.12.1 or dolt v1.84.0 (built with Go 1.25.6)
+# Fix: upstream rebuild with Go >= 1.25.7
+CVE-2025-68121
+
+# CVE-2026-33186: gRPC-Go authorization bypass via missing leading slash
+# In: gastown v0.12.1 (grpc v1.78.0 and v1.79.2)
+# Fix: upstream gastown rebuild with grpc >= 1.79.3
+CVE-2026-33186
+
+# CVE-2026-24051: OpenTelemetry Go SDK arbitrary code execution
+# In: gastown v0.12.1 (otel/sdk v1.38.0)
+# Fix: upstream gastown rebuild with otel/sdk >= 1.40.0
+CVE-2026-24051

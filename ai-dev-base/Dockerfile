@@ -78,6 +78,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
     echo "${NODE_SHA}  /tmp/node.tar.gz" | sha256sum -c - && \
     tar xz --strip-components=1 -C /usr/local < /tmp/node.tar.gz && \
     rm /tmp/node.tar.gz && \
+    npm install -g npm@latest && \
     # GitHub CLI
     curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
       https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -241,7 +242,8 @@ RUN git config --system --add safe.directory '*'
 # Install Python deps, set permissions, configure shell, validate tools —
 # single layer to minimize overhead.
 RUN uv pip install --system --break-system-packages --python /usr/local/bin/python3 \
-    requests>=2.28.0 pyyaml>=6.0 watchdog>=3.0.0 python-dotenv>=1.0.0 && \
+    requests>=2.28.0 pyyaml>=6.0 watchdog>=3.0.0 python-dotenv>=1.0.0 \
+    "setuptools>=78.1.1" "wheel>=0.46.2" "jaraco.context>=6.1.0" && \
     chmod +x /opt/llm-tools/* && \
     ln -sf /opt/llm-tools/* /usr/local/bin/ && \
     chmod +x /opt/dev-infra/*.sh /opt/dev-infra/setup/*.sh \

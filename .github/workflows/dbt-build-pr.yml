@@ -63,7 +63,7 @@ jobs:
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL,HIGH'          trivyignores: .trivyignore
 
   validate-arm64:
     runs-on: ubuntu-latest
