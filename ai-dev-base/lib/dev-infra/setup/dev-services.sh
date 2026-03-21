@@ -135,7 +135,7 @@ svc_start_gastown() {
   fi
 
   # Clean stale PID files from previous container lifecycle
-  for _pidfile in "$GASTOWN_HOME"/daemon/daemon.pid "$GASTOWN_HOME"/daemon/dolt.pid; do
+  for _pidfile in "$GASTOWN_HOME"/daemon/daemon.pid "$GASTOWN_HOME"/daemon/dolt.pid "$GASTOWN_HOME"/.dolt-data/dolt.pid; do
     if [ -f "$_pidfile" ]; then
       local _pid
       _pid=$(cat "$_pidfile" 2>/dev/null)
