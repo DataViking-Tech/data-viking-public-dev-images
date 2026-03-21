@@ -39,9 +39,9 @@ RUN GODOT_ARCH=$(uname -m | sed 's/aarch64/arm64/') && \
       "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" \
       -O /tmp/godot.zip && \
     GODOT_SHA=$(wget -qO- --tries=3 --waitretry=2 \
-      "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip.sha256" \
-      | awk '{print $1}') && \
-    echo "${GODOT_SHA}  /tmp/godot.zip" | sha256sum -c - && \
+      "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/SHA512-SUMS.txt" \
+      | grep "Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}.zip" | awk '{print $1}') && \
+    echo "${GODOT_SHA}  /tmp/godot.zip" | sha512sum -c - && \
     unzip -q /tmp/godot.zip -d /opt && \
     mv "/opt/Godot_v${GODOT_VERSION}-stable_linux.${GODOT_ARCH}" /opt/godot && \
     chmod +x /opt/godot && \
