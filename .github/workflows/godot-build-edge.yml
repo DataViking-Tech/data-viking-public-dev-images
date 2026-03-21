@@ -26,6 +26,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
 
     steps:
       - name: Checkout repository
@@ -68,7 +69,7 @@ jobs:
           cache-from: type=gha,scope=godot-game-dev
           cache-to: type=gha,mode=max,scope=godot-game-dev
           provenance: false
-          sbom: false
+          sbom: true
 
       - name: Test edge image (amd64)
         run: |

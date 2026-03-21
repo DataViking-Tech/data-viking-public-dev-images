@@ -26,6 +26,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
 
     steps:
       - name: Checkout repository
@@ -68,7 +69,7 @@ jobs:
           cache-from: type=gha,scope=dbt-postgres
           cache-to: type=gha,mode=max,scope=dbt-postgres
           provenance: false
-          sbom: false
+          sbom: true
 
       - name: Test edge image (amd64)
         run: |

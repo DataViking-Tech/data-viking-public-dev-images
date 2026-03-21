@@ -37,6 +37,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
 
     steps:
       - name: Checkout repository
@@ -62,7 +63,7 @@ jobs:
           cache-from: type=gha,scope=ai-dev-base-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=ai-dev-base-${{ matrix.arch }}
           provenance: false
-          sbom: false
+          sbom: true
 
       - name: Test image
         run: |
