@@ -8,6 +8,7 @@ on:
     paths:
       - 'godot-game-dev/**'
       - '.github/workflows/godot-build-pr.yml'
+      - '.trivyignore'
 
 concurrency:
   group: godot-pr-build-${{ github.event.pull_request.number }}
@@ -67,7 +68,8 @@ jobs:
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'          trivyignores: .trivyignore
+          severity: 'CRITICAL,HIGH'
+          trivyignores: .trivyignore
 
   validate-arm64:
     runs-on: ubuntu-latest

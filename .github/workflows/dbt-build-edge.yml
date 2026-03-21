@@ -7,8 +7,10 @@ on:
     branches:
       - main
     paths:
+      - 'ai-dev-base/**'
       - 'dbt-postgres/**'
       - '.github/workflows/dbt-build-edge.yml'
+      - '.trivyignore'
   workflow_dispatch:
 
 env:
@@ -87,7 +89,8 @@ jobs:
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'          trivyignores: .trivyignore
+          severity: 'CRITICAL,HIGH'
+          trivyignores: .trivyignore
 
       - name: Image summary
         run: |
