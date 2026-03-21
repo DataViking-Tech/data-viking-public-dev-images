@@ -106,8 +106,8 @@ WORKDIR /workspaces
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD godot --version && python3 --version || exit 1
 
+# Switch to non-root user before starting shell
+USER vscode
+
 # Default shell
 CMD ["/bin/bash"]
-
-# Switch user back before exiting
-USER vscode

@@ -37,6 +37,6 @@ WORKDIR /workspaces
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD dbt --version && python3 --version || exit 1
 
-CMD ["/bin/bash"]
-
 USER vscode
+
+CMD ["/bin/bash"]
