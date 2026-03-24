@@ -83,6 +83,9 @@ test_command "Wrangler CLI" "wrangler --version" "[0-9]"
 # Test PostgreSQL client
 test_command "PostgreSQL client (psql)" "psql --version" "psql"
 
+# Test Playwright/Chromium system dependencies
+test_command "Playwright deps (libglib2.0-0)" "dpkg -s libglib2.0-0" "Status: install ok installed"
+
 # Test Python and ai-coding-utils modules
 echo -n "Testing ai-coding-utils modules... "
 if python3 -c "import slack; import beads" 2>/dev/null; then
