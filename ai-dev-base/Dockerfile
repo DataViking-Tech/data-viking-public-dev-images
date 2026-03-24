@@ -49,7 +49,15 @@ RUN apt-get update && \
     sudo locales \
     ca-certificates gnupg2 openssh-client git curl wget make \
     gcc g++ libicu-dev \
-    tmux sqlite3 jq bash-completion procps unzip libicu72 postgresql-client && \
+    tmux sqlite3 jq bash-completion procps unzip libicu72 postgresql-client \
+    # Playwright/Chromium headless deps (avoids npx playwright install-deps at runtime)
+    libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcairo2 \
+    libcups2 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0 libnspr4 libnss3 \
+    libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 \
+    libxfixes3 libxkbcommon0 libxrandr2 xvfb \
+    fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 \
+    xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei \
+    fonts-tlwg-loma-otf fonts-freefont-ttf && \
     # --- vscode user ---
     groupadd --gid 1000 vscode && \
     useradd --uid 1000 --gid 1000 -m -s /bin/bash vscode && \
