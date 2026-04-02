@@ -27,6 +27,27 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     -o /usr/local/bin/bd ./cmd/bd
 
 ###############################################################################
+# Stage 1b: Build Gas City (gc) from source with patched deps
+#
+# The upstream release binary currently fails Trivy due to embedded Go stdlib
+# and transitive dependency CVEs. Building from source with the current Go
+# toolchain and a patched jsonparser dependency avoids those findings while
+# keeping the pinned Gas City release tag.
+###############################################################################
+FROM golang:1.26-bookworm@sha256:8e8aa801e8417ef0b5c42b504dd34db3db911bb73dba933bd8bde75ed815fdbb AS gascity-builder
+ARG GASCITY_VERSION=0.13.4
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch v${GASCITY_VERSION} https://github.com/gastownhall/gascity.git /src/gascity || \
+    (sleep 2 && git clone --depth 1 --branch v${GASCITY_VERSION} https://github.com/gastownhall/gascity.git /src/gascity) || \
+    (sleep 5 && git clone --depth 1 --branch v${GASCITY_VERSION} https://github.com/gastownhall/gascity.git /src/gascity)
+WORKDIR /src/gascity
+RUN go get github.com/buger/jsonparser@v1.1.2 && go mod download
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o /usr/local/bin/gc ./cmd/gc
+
+###############################################################################
 # Stage 2: Final image
 ###############################################################################
 FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
@@ -138,7 +159,10 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 # Install Beads binary (built from source in stage 1 with CGO_ENABLED=1)
 COPY --from=beads-builder /usr/local/bin/bd /usr/local/bin/bd
 
-# Install Gastown, Gas City, Dolt, Bun, and Claude Code binaries (single layer)
+# Install Gas City binary (built from source in stage 1b)
+COPY --from=gascity-builder /usr/local/bin/gc /usr/local/bin/gc
+
+# Install Gastown, Dolt, Bun, and Claude Code binaries (single layer)
 ENV BUN_INSTALL="/usr/local"
 RUN set -e && \
     # Gastown
@@ -150,16 +174,6 @@ RUN set -e && \
     tar xzf /tmp/gastown.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/gt && \
     rm /tmp/gastown.tar.gz && \
-    # Gas City
-    GC_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
-      "https://api.github.com/repos/gastownhall/gascity/releases/tags/v${GASCITY_VERSION}" | \
-      jq -r ".assets[] | select(.name == \"gascity_${GASCITY_VERSION}_linux_${ARCH}.tar.gz\") | .digest" | sed 's/sha256://') && \
-    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/gascity.tar.gz \
-      "https://github.com/gastownhall/gascity/releases/download/v${GASCITY_VERSION}/gascity_${GASCITY_VERSION}_linux_${ARCH}.tar.gz" && \
-    echo "${GC_SHA}  /tmp/gascity.tar.gz" | sha256sum -c - && \
-    tar xzf /tmp/gascity.tar.gz -C /tmp && \
-    install -m755 /tmp/gc /usr/local/bin/gc && \
-    rm -f /tmp/gascity.tar.gz /tmp/gc && \
     # Dolt (SQL server managed by gt for multi-agent beads access)
     DOLT_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
       "https://api.github.com/repos/dolthub/dolt/releases/tags/v${DOLT_VERSION}" | \
