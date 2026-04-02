@@ -33,6 +33,7 @@ FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0
 
 # Build arguments for external binary versions
 ARG GASTOWN_VERSION=0.13.0
+ARG GASCITY_VERSION=0.13.4
 ARG DOLT_VERSION=1.84.0
 ARG CLAUDE_CODE_VERSION=2.1.81
 ARG CODEX_VERSION=0.116.0
@@ -48,7 +49,7 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     sudo locales \
     ca-certificates gnupg2 openssh-client git curl wget make \
-    gcc g++ libicu-dev \
+    gcc g++ libicu-dev util-linux \
     tmux sqlite3 jq bash-completion procps unzip libicu72 postgresql-client \
     # Playwright/Chromium headless deps (avoids npx playwright install-deps at runtime)
     libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcairo2 \
@@ -137,7 +138,7 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 # Install Beads binary (built from source in stage 1 with CGO_ENABLED=1)
 COPY --from=beads-builder /usr/local/bin/bd /usr/local/bin/bd
 
-# Install Gastown, Dolt, Bun, and Claude Code binaries (single layer)
+# Install Gastown, Gas City, Dolt, Bun, and Claude Code binaries (single layer)
 ENV BUN_INSTALL="/usr/local"
 RUN set -e && \
     # Gastown
@@ -149,6 +150,16 @@ RUN set -e && \
     tar xzf /tmp/gastown.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/gt && \
     rm /tmp/gastown.tar.gz && \
+    # Gas City
+    GC_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      "https://api.github.com/repos/gastownhall/gascity/releases/tags/v${GASCITY_VERSION}" | \
+      jq -r ".assets[] | select(.name == \"gascity_${GASCITY_VERSION}_linux_${ARCH}.tar.gz\") | .digest" | sed 's/sha256://') && \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/gascity.tar.gz \
+      "https://github.com/gastownhall/gascity/releases/download/v${GASCITY_VERSION}/gascity_${GASCITY_VERSION}_linux_${ARCH}.tar.gz" && \
+    echo "${GC_SHA}  /tmp/gascity.tar.gz" | sha256sum -c - && \
+    tar xzf /tmp/gascity.tar.gz -C /tmp && \
+    install -m755 /tmp/gc /usr/local/bin/gc && \
+    rm -f /tmp/gascity.tar.gz /tmp/gc && \
     # Dolt (SQL server managed by gt for multi-agent beads access)
     DOLT_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
       "https://api.github.com/repos/dolthub/dolt/releases/tags/v${DOLT_VERSION}" | \

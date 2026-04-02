@@ -7,6 +7,7 @@ Foundation Docker image for AI coding workflows with embedded utilities.
 - **Claude CLI** - AI assistant command-line tool
 - **Beads (bd)** - Issue tracking for AI workflows
 - **Gas Town (gt)** - Multi-agent workspace manager
+- **Gas City (gc)** - Service/runtime manager for Gas Town workflows
 - **Python 3.11 + uv** - Python runtime and package manager
 - **dev-infra components** - SecretsManager, credential caching, directory setup
 - **ai-coding-utils** - Slack notifications, workflow integration
@@ -38,6 +39,7 @@ This image includes:
 - Claude CLI: latest
 - Beads: 0.60.0
 - Gas Town (gt): 0.12.0
+- Gas City (gc): 0.13.4
 - ai-coding-utils (embedded from `lib/ai-coding-utils/`)
 - dev-infra (embedded from `lib/dev-infra/`)
 
