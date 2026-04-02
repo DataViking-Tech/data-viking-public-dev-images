@@ -69,7 +69,7 @@ test_command "Bun" "bun --version" "[0-9]"
 test_command "Gastown (gt)" "gt --version" "gt version"
 
 # Test Gas City
-test_command "Gas City (gc)" "gc version" "gc version"
+test_command "Gas City (gc)" "gc version" "[0-9]"
 
 # Test Dolt
 test_command "Dolt" "dolt version" "[0-9]"
