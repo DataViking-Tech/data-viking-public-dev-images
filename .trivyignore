@@ -25,6 +25,21 @@ CVE-2026-33186
 # Fix: upstream gastown rebuild with otel/sdk >= 1.40.0
 CVE-2026-24051
 
+# CVE-2026-33671: picomatch Regular Expression DoS
+# In: wrangler's bundled Node.js dependency graph in the globally installed CLI.
+# This is a transitive vendored dependency inside the upstream tool bundle.
+# Re-evaluate on the next wrangler upgrade.
+CVE-2026-33671
+
+# CVE-2026-34040 / CVE-2026-33747 / CVE-2026-33748
+# In: Docker Compose plugin binary from Docker's official apt repository.
+# The image installs the vendor-maintained plugin package rather than building
+# Compose from source. Re-evaluate when Docker publishes a package with updated
+# embedded docker/buildkit libraries.
+CVE-2026-34040
+CVE-2026-33747
+CVE-2026-33748
+
 # AsymmetricPrivateKey (secret/private-key) false positives
 # In: /usr/local/install/cache/wrangler and miniflare JS bundles
 # These are test-fixture private keys embedded in Cloudflare's tooling bundles —

@@ -27,12 +27,34 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     -o /usr/local/bin/bd ./cmd/bd
 
 ###############################################################################
+# Stage 1b: Build Gas City (gc) from source with patched deps
+#
+# The upstream release binary currently fails Trivy due to embedded Go stdlib
+# and transitive dependency CVEs. Building from source with the current Go
+# toolchain and a patched jsonparser dependency avoids those findings while
+# keeping the pinned Gas City release tag.
+###############################################################################
+FROM golang:1.26-bookworm@sha256:8e8aa801e8417ef0b5c42b504dd34db3db911bb73dba933bd8bde75ed815fdbb AS gascity-builder
+ARG GASCITY_VERSION=0.13.4
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch v${GASCITY_VERSION} https://github.com/gastownhall/gascity.git /src/gascity || \
+    (sleep 2 && git clone --depth 1 --branch v${GASCITY_VERSION} https://github.com/gastownhall/gascity.git /src/gascity) || \
+    (sleep 5 && git clone --depth 1 --branch v${GASCITY_VERSION} https://github.com/gastownhall/gascity.git /src/gascity)
+WORKDIR /src/gascity
+RUN go get github.com/buger/jsonparser@v1.1.2 && go mod download
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o /usr/local/bin/gc ./cmd/gc
+
+###############################################################################
 # Stage 2: Final image
 ###############################################################################
 FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
 
 # Build arguments for external binary versions
 ARG GASTOWN_VERSION=0.13.0
+ARG GASCITY_VERSION=0.13.4
 ARG DOLT_VERSION=1.84.0
 ARG CLAUDE_CODE_VERSION=2.1.81
 ARG CODEX_VERSION=0.116.0
@@ -48,7 +70,7 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     sudo locales \
     ca-certificates gnupg2 openssh-client git curl wget make \
-    gcc g++ libicu-dev \
+    gcc g++ libicu-dev util-linux \
     tmux sqlite3 jq bash-completion procps unzip libicu72 postgresql-client \
     # Playwright/Chromium headless deps (avoids npx playwright install-deps at runtime)
     libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcairo2 \
@@ -136,6 +158,9 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Install Beads binary (built from source in stage 1 with CGO_ENABLED=1)
 COPY --from=beads-builder /usr/local/bin/bd /usr/local/bin/bd
+
+# Install Gas City binary (built from source in stage 1b)
+COPY --from=gascity-builder /usr/local/bin/gc /usr/local/bin/gc
 
 # Install Gastown, Dolt, Bun, and Claude Code binaries (single layer)
 ENV BUN_INSTALL="/usr/local"
