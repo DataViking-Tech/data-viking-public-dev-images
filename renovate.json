@@ -28,7 +28,7 @@
       "matchStrings": [
         "ARG GASTOWN_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
-      "depNameTemplate": "steveyegge/gastown",
+      "depNameTemplate": "gastownhall/gastown",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.*)$"
     },

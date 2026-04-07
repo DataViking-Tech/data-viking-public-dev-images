@@ -48,12 +48,37 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /usr/local/bin/gc ./cmd/gc
 
 ###############################################################################
+# Stage 1c: Build Gas Town from source
+#
+# As of v1.0.0, the upstream GitHub release no longer ships pre-built linux
+# tarballs (the v1.0.0 release at gastownhall/gastown has zero binary assets).
+# We mirror the gascity-builder pattern and build gt from source — which is
+# also what the official Homebrew formula does.
+###############################################################################
+FROM golang:1.26-bookworm@sha256:8e8aa801e8417ef0b5c42b504dd34db3db911bb73dba933bd8bde75ed815fdbb AS gastown-builder
+ARG GASTOWN_VERSION=1.0.0
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch v${GASTOWN_VERSION} https://github.com/gastownhall/gastown.git /src/gastown || \
+    (sleep 2 && git clone --depth 1 --branch v${GASTOWN_VERSION} https://github.com/gastownhall/gastown.git /src/gastown) || \
+    (sleep 5 && git clone --depth 1 --branch v${GASTOWN_VERSION} https://github.com/gastownhall/gastown.git /src/gastown)
+WORKDIR /src/gastown
+RUN go mod download
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 go build \
+      -ldflags="-s -w \
+        -X github.com/steveyegge/gastown/internal/cmd.Version=${GASTOWN_VERSION} \
+        -X github.com/steveyegge/gastown/internal/cmd.Branch=v${GASTOWN_VERSION}" \
+      -o /usr/local/bin/gt ./cmd/gt
+
+###############################################################################
 # Stage 2: Final image
 ###############################################################################
 FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
 
 # Build arguments for external binary versions
-ARG GASTOWN_VERSION=0.13.0
+ARG GASTOWN_VERSION=1.0.0
 ARG GASCITY_VERSION=0.13.4
 ARG DOLT_VERSION=1.84.0
 ARG CLAUDE_CODE_VERSION=2.1.81
@@ -162,18 +187,14 @@ COPY --from=beads-builder /usr/local/bin/bd /usr/local/bin/bd
 # Install Gas City binary (built from source in stage 1b)
 COPY --from=gascity-builder /usr/local/bin/gc /usr/local/bin/gc
 
-# Install Gastown, Dolt, Bun, and Claude Code binaries (single layer)
+# Install Gas Town binary (built from source in stage 1c — see comment on
+# the gastown-builder stage above for why we no longer wget the release tarball)
+COPY --from=gastown-builder /usr/local/bin/gt /usr/local/bin/gt
+
+# Install Dolt, Bun, and Claude Code binaries (single layer)
 ENV BUN_INSTALL="/usr/local"
 RUN set -e && \
-    # Gastown
     ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
-    wget -q --tries=3 --waitretry=2 "https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" -O /tmp/gastown.tar.gz && \
-    GT_SHA=$(wget -qO- "https://github.com/steveyegge/gastown/releases/download/v${GASTOWN_VERSION}/checksums.txt" | \
-      grep "gastown_${GASTOWN_VERSION}_linux_${ARCH}.tar.gz" | awk '{print $1}') && \
-    echo "${GT_SHA}  /tmp/gastown.tar.gz" | sha256sum -c - && \
-    tar xzf /tmp/gastown.tar.gz -C /usr/local/bin && \
-    chmod +x /usr/local/bin/gt && \
-    rm /tmp/gastown.tar.gz && \
     # Dolt (SQL server managed by gt for multi-agent beads access)
     DOLT_SHA=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
       "https://api.github.com/repos/dolthub/dolt/releases/tags/v${DOLT_VERSION}" | \
