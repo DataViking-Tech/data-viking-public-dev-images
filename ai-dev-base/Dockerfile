@@ -6,7 +6,7 @@
 # Building from source ensures CGO is enabled on all architectures.
 # See: https://github.com/steveyegge/beads/pull/1 (arm64 CGO fix)
 ###############################################################################
-FROM golang:1.26-bookworm@sha256:8e8aa801e8417ef0b5c42b504dd34db3db911bb73dba933bd8bde75ed815fdbb AS beads-builder
+FROM golang:1.26-bookworm@sha256:47ce5636e9936b2c5cbf708925578ef386b4f8872aec74a67bd13a627d242b19 AS beads-builder
 ARG BEADS_VERSION=1.0.0
 RUN apt-get update && apt-get install -y --no-install-recommends git gcc g++ libicu-dev && \
     rm -rf /var/lib/apt/lists/*
@@ -34,7 +34,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # toolchain and a patched jsonparser dependency avoids those findings while
 # keeping the pinned Gas City release tag.
 ###############################################################################
-FROM golang:1.26-bookworm@sha256:8e8aa801e8417ef0b5c42b504dd34db3db911bb73dba933bd8bde75ed815fdbb AS gascity-builder
+FROM golang:1.26-bookworm@sha256:47ce5636e9936b2c5cbf708925578ef386b4f8872aec74a67bd13a627d242b19 AS gascity-builder
 ARG GASCITY_VERSION=0.13.4
 RUN apt-get update && apt-get install -y --no-install-recommends git && \
     rm -rf /var/lib/apt/lists/*
@@ -55,7 +55,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # We mirror the gascity-builder pattern and build gt from source — which is
 # also what the official Homebrew formula does.
 ###############################################################################
-FROM golang:1.26-bookworm@sha256:8e8aa801e8417ef0b5c42b504dd34db3db911bb73dba933bd8bde75ed815fdbb AS gastown-builder
+FROM golang:1.26-bookworm@sha256:47ce5636e9936b2c5cbf708925578ef386b4f8872aec74a67bd13a627d242b19 AS gastown-builder
 ARG GASTOWN_VERSION=1.0.0
 RUN apt-get update && apt-get install -y --no-install-recommends git && \
     rm -rf /var/lib/apt/lists/*
